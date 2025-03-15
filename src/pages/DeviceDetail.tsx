@@ -292,7 +292,7 @@ const DeviceDetail: React.FC = () => {
               <p className="text-muted-foreground">Nenhum serviço registrado.</p>
             )}
             <div className="mt-4">
-              <Button onClick={handleNewService}>Novo Serviço</Button>
+              
             </div>
           </Card>
         </div>

@@ -115,8 +115,8 @@ const Documents: React.FC = () => {
     }
   };
 
-  const handleNewDocument = (type: 'nfe' | 'nfce' | 'nfse') => {
-    navigate('/documents/new', { state: { documentType: type } });
+  const handleNewDocument = () => {
+    navigate('/documents/new');
   };
 
   const handleExport = (format: string) => {
@@ -465,16 +465,13 @@ const Documents: React.FC = () => {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">Documentos Fiscais</h1>
           <div className="flex gap-2">
-            <Button onClick={() => handleNewDocument('nfe')} variant="outline">
-              <FileIcon className="w-4 h-4 mr-2" />
+            <Button onClick={() => navigate('/documents/new', { state: { documentType: 'nfe' } })} variant="outline" className="gap-2">
               Emitir NF-e
             </Button>
-            <Button onClick={() => handleNewDocument('nfce')} variant="outline">
-              <FileCheckIcon className="w-4 h-4 mr-2" />
+            <Button onClick={() => navigate('/documents/new', { state: { documentType: 'nfce' } })} variant="outline" className="gap-2">
               Emitir NFC-e
             </Button>
-            <Button onClick={() => handleNewDocument('nfse')} variant="outline">
-              <FilePlusIcon className="w-4 h-4 mr-2" />
+            <Button onClick={() => navigate('/documents/new', { state: { documentType: 'nfse' } })} variant="outline" className="gap-2">
               Emitir NFS-e
             </Button>
             <DropdownMenu>
@@ -666,7 +663,7 @@ const Documents: React.FC = () => {
                       <div className="flex flex-col items-center gap-2">
                         <FileTextIcon className="w-8 h-8 text-muted-foreground" />
                         <p className="text-muted-foreground">Nenhum documento encontrado</p>
-                        <Button onClick={() => handleNewDocument('nfe')} variant="outline">
+                        <Button onClick={handleNewDocument} variant="outline">
                           <PlusIcon className="w-4 h-4 mr-2" />
                           Novo Documento
                         </Button>

@@ -112,8 +112,8 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, toggleSidebar }) => {
         
         <div className="p-4 border-t border-sidebar-border">
           <div className="flex items-center">
-            <div className="w-8 h-8 rounded-full bg-sidebar-primary flex items-center justify-center text-white font-medium">
-              PC
+            <div className="w-8 h-8 rounded-full overflow-hidden">
+              <img src="/logo.svg" alt="Paulo Cell Logo" className="w-full h-full object-cover" />
             </div>
             <AnimatePresence>
               {!collapsed && (
@@ -124,8 +124,8 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, toggleSidebar }) => {
                   transition={{ duration: 0.2 }}
                   className="ml-3"
                 >
-                  <div className="font-medium text-sidebar-foreground">Admin</div>
-                  <div className="text-xs text-sidebar-foreground/70">admin@paulocell.com</div>
+                  <div className="font-medium text-sidebar-foreground">Paulo Cell Sistema</div>
+                  <div className="text-xs text-sidebar-foreground/70">paulocell.com.br</div>
                 </motion.div>
               )}
             </AnimatePresence>

@@ -403,19 +403,11 @@ const CustomerDetail: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.3 }}
             >
-              <div className="flex justify-between items-center mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold">Documentos</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Total de {customerDocuments.length} documentos emitidos
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="gap-1" onClick={() => handleNewDocument()}>
-                    <FileTextIcon size={16} />
-                    <span>Emitir Nota Fiscal</span>
-                  </Button>
-                </div>
+              <div className="flex flex-col items-center text-center mb-4">
+                <h3 className="text-lg font-semibold">Documentos</h3>
+                <p className="text-sm text-muted-foreground">
+                  Total de {customerDocuments.length} documentos emitidos
+                </p>
               </div>
               
               <div>
@@ -460,20 +452,6 @@ const CustomerDetail: React.FC = () => {
                 ) : (
                   <div className="text-center py-8 bg-muted/30 rounded-lg">
                     <p className="text-muted-foreground mb-3">Nenhum documento registrado</p>
-                    <div className="flex flex-col sm:flex-row gap-2 justify-center">
-                      <Button onClick={() => handleNewDocument('nfe')} variant="outline" size="sm" className="gap-1">
-                        <FileTextIcon size={16} />
-                        <span>Emitir NF-e</span>
-                      </Button>
-                      <Button onClick={() => handleNewDocument('nfce')} variant="outline" size="sm" className="gap-1">
-                        <FileTextIcon size={16} />
-                        <span>Emitir NFC-e</span>
-                      </Button>
-                      <Button onClick={() => handleNewDocument('nfse')} variant="outline" size="sm" className="gap-1">
-                        <FileTextIcon size={16} />
-                        <span>Emitir NFS-e</span>
-                      </Button>
-                    </div>
                   </div>
                 )}
               </div>
