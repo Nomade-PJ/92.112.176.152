@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import MainLayout from '@/components/layout/MainLayout';
-import { Button } from '@/components/ui/button';
+import MainLayout from '../components/layout/MainLayout';
+import { Button } from '../components/ui/button';
 import {
   Table,
   TableBody,
@@ -10,13 +10,13 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "../components/ui/table";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
+} from "../components/ui/card";
 import {
   FileTextIcon,
   PlusIcon,
@@ -27,27 +27,30 @@ import {
   FileIcon,
   FileCheckIcon,
   FilePlusIcon,
-  TrashIcon,
   SettingsIcon,
-  AlertCircleIcon
+  AlertCircleIcon,
+  MailIcon,
+  PencilIcon,
+  MoreVerticalIcon
 } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import { Input } from '../components/ui/input';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "../components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "../components/ui/dropdown-menu";
 import { toast } from 'sonner';
-import { moveDocumentToTrash } from '@/lib/document-trash-utils';
+import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
+import { exportToPDF, exportToExcel, exportToCSV } from '../lib/export-utils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,15 +60,23 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { exportToPDF, exportToExcel, exportToCSV } from '@/lib/export-utils';
+} from "../components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+// Note: document-pdf-utils and email-utils are imported dynamically when needed
 
 interface Document {
   id: string;
   type: 'nfe' | 'nfce' | 'nfse';
   number: string;
   customer: string;
+  customerId?: string;
   date: string;
   value: number;
   status: 'Emitida' | 'Cancelada' | 'Pendente';
@@ -76,7 +87,27 @@ interface Document {
   }>;
   paymentMethod: string;
   observations?: string;
+  invoiceId?: string;
+  invoiceUrl?: string;
 }
+
+const debugEmailJS = async () => {
+  try {
+    const emailjsModule = await import('@emailjs/browser');
+    const emailjs = emailjsModule.default || emailjsModule;
+    
+    console.log('======= DIAGNÓSTICO DO EMAILJS =======');
+    console.log('EmailJS carregado:', !!emailjs);
+    console.log('EmailJS métodos disponíveis:', Object.keys(emailjs));
+    console.log('Ambiente da aplicação:', import.meta.env.MODE || 'Não disponível');
+    console.log('=====================================');
+    
+    return true;
+  } catch (error) {
+    console.error('Erro ao depurar EmailJS:', error);
+    return false;
+  }
+};
 
 const Documents: React.FC = () => {
   const navigate = useNavigate();
@@ -84,8 +115,22 @@ const Documents: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [documentToDelete, setDocumentToDelete] = useState<string | null>(null);
   const [isApiConfigured, setIsApiConfigured] = useState(true);
+  const [isPrintLoading, setIsPrintLoading] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [printDialogOpen, setPrintDialogOpen] = useState(false);
+  const [documentToPrint, setDocumentToPrint] = useState<Document | null>(null);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [documentToEmail, setDocumentToEmail] = useState<Document | null>(null);
+  const [emailTo, setEmailTo] = useState('');
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportPeriod, setExportPeriod] = useState<'7days' | '1month' | '12months'>('7days');
+  const [exportFormat, setExportFormat] = useState<string>('pdf');
+  const [showExport, setShowExport] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Ref para o toast de carregamento do PDF
+  const loadingToastRef = useRef<string | number | null>(null);
 
   useEffect(() => {
     loadDocuments();
@@ -109,10 +154,25 @@ const Documents: React.FC = () => {
   };
 
   const loadDocuments = () => {
-    const savedDocuments = localStorage.getItem('pauloCell_documents');
-    if (savedDocuments) {
-      setDocuments(JSON.parse(savedDocuments));
-    }
+    setIsLoading(true);
+    // A small delay to show the loading state
+    setTimeout(() => {
+      try {
+        // Get documents from localStorage
+        const savedDocs = localStorage.getItem("pauloCell_documents") || "[]";
+        const allDocs = JSON.parse(savedDocs);
+        
+        // Filter based on current period
+        const filteredDocs = filterByPeriod(allDocs, exportPeriod);
+        
+        setDocuments(filteredDocs);
+      } catch (error) {
+        console.error("Error loading documents:", error);
+        toast.error("Erro ao carregar documentos");
+      } finally {
+        setIsLoading(false);
+      }
+    }, 300);
   };
 
   const handleNewDocument = () => {
@@ -121,25 +181,22 @@ const Documents: React.FC = () => {
 
   const handleExport = (format: string) => {
     try {
+      // Obter documentos filtrados
       const filteredDocs = filterDocuments();
-      switch (format) {
-        case 'pdf':
-          exportToPDF(filteredDocs, 'Documentos_Fiscais');
-          break;
-        case 'excel':
-          exportToExcel(filteredDocs, 'Documentos_Fiscais');
-          break;
-        case 'csv':
-          exportToCSV(filteredDocs, 'Documentos_Fiscais');
-          break;
-        default:
-          toast.error('Formato de exportação não suportado');
-          return;
+      
+      if (filteredDocs.length === 0) {
+        toast.error('Nenhum documento encontrado para exportação');
+        return;
       }
-      toast.success(`Documentos exportados em formato ${format.toUpperCase()}`);
+      
+      // Para todos os formatos, mostrar o diálogo de seleção de período
+      setExportDialogOpen(true);
+      
+      // Salvar o formato selecionado para usar posteriormente
+      setExportFormat(format);
     } catch (error) {
-      console.error('Error exporting documents:', error);
-      toast.error('Erro ao exportar documentos');
+      console.error('Erro ao iniciar exportação:', error);
+      toast.error('Erro ao iniciar exportação');
     }
   };
 
@@ -154,139 +211,244 @@ const Documents: React.FC = () => {
   };
 
   const [selectedColumns, setSelectedColumns] = useState<string[]>(['number', 'type', 'customer', 'date', 'value', 'status', 'paymentMethod']);
-  const [showPrintDialog, setShowPrintDialog] = useState(false);
-  const [documentToPrint, setDocumentToPrint] = useState<Document | null>(null);
 
   const handlePrint = (doc: Document) => {
     setDocumentToPrint(doc);
-    setShowPrintDialog(true);
+    setPrintDialogOpen(true);
   };
 
   const handlePrintConfirm = () => {
     if (!documentToPrint) return;
 
     try {
-      const printStyles = `
-        <style>
-          @media print {
-            body { margin: 0; padding: 20px; font-family: Arial, sans-serif; }
-            table { page-break-inside: auto; width: 100%; border-collapse: collapse; }
-            tr { page-break-inside: avoid; page-break-after: auto; }
-            thead { display: table-header-group; }
-            tfoot { display: table-footer-group; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            .document-header { text-align: center; margin-bottom: 30px; }
-            .document-info { margin: 20px; }
-            .section-title { margin: 20px 0; }
-          }
-        </style>
-      `;
-
-      const getDocumentInfo = () => {
-        const info = [];
-        if (selectedColumns.includes('number')) info.push(`<p><strong>Número:</strong> ${documentToPrint.number}</p>`);
-        if (selectedColumns.includes('type')) info.push(`<p><strong>Tipo:</strong> ${documentToPrint.type.toUpperCase()}</p>`);
-        if (selectedColumns.includes('customer')) info.push(`<p><strong>Cliente:</strong> ${documentToPrint.customer}</p>`);
-        if (selectedColumns.includes('date')) info.push(`<p><strong>Data:</strong> ${new Date(documentToPrint.date).toLocaleDateString('pt-BR')}</p>`);
-        if (selectedColumns.includes('value')) info.push(`<p><strong>Valor:</strong> ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(documentToPrint.value)}</p>`);
-        if (selectedColumns.includes('status')) info.push(`<p><strong>Status:</strong> ${documentToPrint.status}</p>`);
-        if (selectedColumns.includes('paymentMethod')) info.push(`<p><strong>Forma de Pagamento:</strong> ${documentToPrint.paymentMethod}</p>`);
-        return info.join('');
-      };
-
-      const content = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="utf-8">
-            <title>Documento Fiscal</title>
-            ${printStyles}
-          </head>
-          <body>
-            <div class="document-header">
-              <h1>Documento Fiscal</h1>
-            </div>
-            <div class="document-info">
-              ${getDocumentInfo()}
-            </div>
-            ${selectedColumns.includes('items') ? `
-              <h2 class="section-title">Itens</h2>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Descrição</th>
-                    <th>Quantidade</th>
-                    <th>Valor Unitário</th>
-                    <th>Valor Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${documentToPrint.items.map(item => `
-                    <tr>
-                      <td>${item.description}</td>
-                      <td>${item.quantity}</td>
-                      <td>${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.unitValue)}</td>
-                      <td>${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.quantity * item.unitValue)}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            ` : ''}
-          </body>
-        </html>
-      `;
-
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(content);
-        printWindow.document.close();
-        setTimeout(() => {
-          printWindow.print();
+      // Fechar o diálogo imediatamente para evitar travamento
+      setPrintDialogOpen(false);
+      
+      // Import the enhanced print content generation function
+      import('../lib/document-pdf-utils').then(({ generateEnhancedPrintContent }) => {
+        // Generate enhanced print content with professional layout
+        const content = generateEnhancedPrintContent(documentToPrint);
+        
+        // Criar a janela de impressão
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+          printWindow.document.write(content);
+          printWindow.document.close();
+          
+          // Adicionar evento para detectar quando a janela é fechada
+          const checkWindowClosed = setInterval(() => {
+            if (printWindow.closed) {
+              clearInterval(checkWindowClosed);
+              setDocumentToPrint(null);
+            }
+          }, 500);
+          
+          // Configurar callback para impressão
           printWindow.onafterprint = () => {
             printWindow.close();
-            setShowPrintDialog(false);
             setDocumentToPrint(null);
+            clearInterval(checkWindowClosed);
           };
-        }, 250);
-      } else {
-        toast.error('Não foi possível abrir a janela de impressão');
-      }
+          
+          // Iniciar impressão após um breve delay
+          setTimeout(() => {
+            printWindow.print();
+          }, 250);
+        } else {
+          toast.error('Não foi possível abrir a janela de impressão');
+          setDocumentToPrint(null);
+        }
+      });
     } catch (error) {
-      console.error('Error printing document:', error);
-      toast.error('Erro ao imprimir documento');
+      console.error('Erro ao imprimir documento:', error);
+      toast.error('Erro ao preparar impressão');
+      setPrintDialogOpen(false);
+      setDocumentToPrint(null);
     }
   };
 
   const handleDownload = (doc: Document) => {
     try {
-      exportToPDF([doc], `Documento_${doc.number}`);
-      toast.success('Documento exportado com sucesso como PDF');
+      // If we have an invoice URL from the API, open it in a new tab
+      if (doc.invoiceUrl) {
+        window.open(doc.invoiceUrl, '_blank');
+        toast.success('Abrindo documento fiscal no site do provedor');
+        return;
+      }
+      
+      // Import the enhanced PDF generation function
+      import('../lib/document-pdf-utils').then(({ generateEnhancedDocumentPDF }) => {
+        // Generate enhanced PDF with professional layout
+        generateEnhancedDocumentPDF(doc);
+        toast.success('Documento exportado com sucesso como PDF');
+      }).catch(error => {
+        console.error('Error importing PDF utils:', error);
+        toast.error('Erro ao gerar PDF');
+      });
     } catch (error) {
       console.error('Error downloading document:', error);
       toast.error('Erro ao baixar documento');
     }
   };
-
-  const handleDelete = (documentId: string) => {
-    setDocumentToDelete(documentId);
+  
+  const handleSendEmail = async (doc: Document) => {
+    // Executar diagnóstico antes de enviar
+    await debugEmailJS();
+    
+    // Get customer email from localStorage using customerId
+    let customerEmail = '';
+    
+    if (doc.customerId) {
+      try {
+        const savedCustomers = localStorage.getItem('pauloCell_customers');
+        if (savedCustomers) {
+          const customers = JSON.parse(savedCustomers);
+          const customer = customers.find((c: any) => c.id === doc.customerId);
+          if (customer && customer.email) {
+            customerEmail = customer.email;
+            // Se temos o email, enviar diretamente
+            await sendEmailDirectly(doc, customerEmail);
+            return;
+          } else if (customer && customer.name) {
+            toast.info(`Cliente ${customer.name} encontrado, mas sem email cadastrado.`);
+          }
+        }
+      } catch (error) {
+        console.error("Erro ao buscar email do cliente:", error);
+      }
+    }
+    
+    // Se não encontrou email do cliente, tenta buscar de emissões anteriores
+    if (!customerEmail) {
+      try {
+        const savedDocuments = localStorage.getItem('pauloCell_documents');
+        if (savedDocuments) {
+          const allDocs = JSON.parse(savedDocuments);
+          // Buscar documentos do mesmo cliente (por nome, já que pode não ter ID)
+          const customerDocs = allDocs.filter((d: Document) => 
+            d.customer === doc.customer && d.id !== doc.id
+          );
+          
+          // Ordena do mais recente para o mais antigo
+          customerDocs.sort((a: Document, b: Document) => 
+            new Date(b.date).getTime() - new Date(a.date).getTime()
+          );
+          
+          // Procura um email usado anteriormente
+          for (const prevDoc of customerDocs) {
+            if (prevDoc.emailSentTo) {
+              customerEmail = prevDoc.emailSentTo;
+              // Se encontrou um email anterior, perguntar se deve usar
+              toast.message(
+                `Email encontrado em documento anterior: ${customerEmail}`,
+                {
+                  action: {
+                    label: "Usar este email",
+                    onClick: () => sendEmailDirectly(doc, customerEmail)
+                  },
+                  duration: 5000
+                }
+              );
+              return;
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Erro ao buscar email em documentos anteriores:", error);
+      }
+    }
+    
+    // Se não temos um email para usar, abrir diálogo para o usuário inserir
+    setDocumentToEmail(doc);
+    setEmailTo('');
+    setEmailDialogOpen(true);
   };
-
-  const confirmDelete = () => {
-    if (!documentToDelete) return;
+  
+  // Função para enviar email diretamente sem mostrar diálogo
+  const sendEmailDirectly = async (doc: Document, email: string) => {
+    if (!email || !email.trim()) {
+      toast.error('Email inválido');
+      return;
+    }
     
     try {
-      const success = moveDocumentToTrash(documentToDelete);
+      setIsSendingEmail(true);
+      
+      // Import the email utility
+      const { sendDocumentByEmail } = await import('../lib/email-utils');
+      
+      // Send the email
+      const success = await sendDocumentByEmail(doc as any, email);
+      
       if (success) {
-        loadDocuments(); // Refresh the list
-        toast.success('Documento movido para a lixeira');
-      } else {
-        toast.error('Erro ao mover documento para a lixeira');
+        // Salvar o email usado para futuros envios
+        try {
+          const savedDocuments = localStorage.getItem('pauloCell_documents');
+          if (savedDocuments) {
+            const allDocs = JSON.parse(savedDocuments);
+            const updatedDocs = allDocs.map((d: Document) => {
+              if (d.id === doc.id) {
+                // Adicionar campo emailSentTo para rastrear o email usado
+                return { ...d, emailSentTo: email };
+              }
+              return d;
+            });
+            localStorage.setItem('pauloCell_documents', JSON.stringify(updatedDocs));
+          }
+        } catch (error) {
+          console.error("Erro ao salvar email usado:", error);
+        }
       }
     } catch (error) {
-      console.error('Error moving document to trash:', error);
-      toast.error('Erro ao mover documento para a lixeira');
+      console.error('Error sending document by email:', error);
+      toast.error('Erro ao enviar documento por email');
     } finally {
-      setDocumentToDelete(null); // Close the dialog
+      setIsSendingEmail(false);
+    }
+  };
+  
+  const handleSendEmailConfirm = async () => {
+    if (!documentToEmail || !emailTo || !emailTo.trim()) {
+      toast.error('Por favor, insira um email válido');
+      return;
+    }
+    
+    try {
+      setIsSendingEmail(true);
+      setEmailDialogOpen(false);
+      
+      // Import the email utility
+      const { sendDocumentByEmail } = await import('../lib/email-utils');
+      
+      // Send the email
+      const success = await sendDocumentByEmail(documentToEmail as any, emailTo);
+      
+      if (success) {
+        // Salvar o email usado para futuros envios
+        try {
+          const savedDocuments = localStorage.getItem('pauloCell_documents');
+          if (savedDocuments) {
+            const allDocs = JSON.parse(savedDocuments);
+            const updatedDocs = allDocs.map((d: Document) => {
+              if (d.id === documentToEmail.id) {
+                // Adicionar campo emailSentTo para rastrear o email usado
+                return { ...d, emailSentTo: emailTo };
+              }
+              return d;
+            });
+            localStorage.setItem('pauloCell_documents', JSON.stringify(updatedDocs));
+          }
+        } catch (error) {
+          console.error("Erro ao salvar email usado:", error);
+        }
+        
+        setDocumentToEmail(null);
+      }
+    } catch (error) {
+      console.error('Error sending document by email:', error);
+      toast.error('Erro ao enviar documento por email');
+    } finally {
+      setIsSendingEmail(false);
     }
   };
 
@@ -318,9 +480,205 @@ const Documents: React.FC = () => {
     }
   };
 
+  const handleChangeStatus = (documentId: string, newStatus: 'Emitida' | 'Cancelada' | 'Pendente') => {
+    handleStatusChange(documentId, newStatus);
+  };
+
+  // Função para filtrar documentos por período
+  const filterByPeriod = (docs: Document[], period: '7days' | '1month' | '12months') => {
+    const now = new Date();
+    const msPerDay = 24 * 60 * 60 * 1000;
+    
+    // Definir a data de início baseada no período selecionado
+    let startDate: Date;
+    switch (period) {
+      case '7days':
+        startDate = new Date(now.getTime() - 7 * msPerDay);
+        break;
+      case '1month':
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+        break;
+      case '12months':
+        startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+        break;
+      default:
+        startDate = new Date(now.getTime() - 7 * msPerDay);
+    }
+    
+    // Filtrar documentos pela data
+    return docs.filter(doc => {
+      const docDate = new Date(doc.date);
+      return docDate >= startDate && docDate <= now;
+    });
+  };
+
+  // Função para exportar documentos por período
+  const exportDocumentsByPeriod = async () => {
+    // Fechar o diálogo de exportação
+    setExportDialogOpen(false);
+    
+    // Remover qualquer toast que possa estar ativo
+    toast.dismiss();
+    
+    // Filtrar documentos pelo período
+    const filteredDocs = filterByPeriod(documents, exportPeriod);
+    
+    if (filteredDocs.length === 0) {
+      toast.error('Nenhum documento encontrado no período selecionado');
+      return;
+    }
+    
+    try {
+      // Importar o módulo necessário para geração de PDF
+      const { generateMultipleDocumentsPDF } = await import('../lib/document-pdf-utils');
+      
+      // Gerar o PDF com todos os documentos
+      const success = await generateMultipleDocumentsPDF(filteredDocs);
+      
+      // Remover qualquer toast pendente
+      toast.dismiss();
+      
+      if (success) {
+        toast.success(`${filteredDocs.length} documentos exportados com sucesso para PDF`);
+      } else {
+        toast.error('Erro ao gerar PDF dos documentos');
+      }
+    } catch (error) {
+      // Remover qualquer toast pendente
+      toast.dismiss();
+      console.error('Erro ao exportar documentos por período:', error);
+      toast.error('Erro na exportação do PDF');
+    }
+  };
+
+  // Função para exportar documentos em Excel filtrados por período
+  const exportExcelByPeriod = () => {
+    // Fechar o diálogo de exportação
+    setExportDialogOpen(false);
+    
+    // Remover qualquer toast que possa estar ativo
+    toast.dismiss();
+    
+    // Filtrar documentos pelo período selecionado
+    const filteredDocs = filterByPeriod(documents, exportPeriod);
+    
+    if (filteredDocs.length === 0) {
+      toast.error('Nenhum documento encontrado no período selecionado');
+      return;
+    }
+    
+    try {
+      // Exportar para Excel sem mostrar toast de processamento
+      const success = exportToExcel(filteredDocs, 'Documentos_Fiscais');
+      
+      // Remover qualquer toast pendente
+      toast.dismiss();
+      
+      if (success) {
+        toast.success(`${filteredDocs.length} documentos exportados com sucesso em formato Excel`);
+      } else {
+        toast.error('Falha ao exportar documentos para Excel');
+      }
+    } catch (error) {
+      // Remover qualquer toast pendente
+      toast.dismiss();
+      console.error('Erro ao exportar para Excel:', error);
+      toast.error('Falha na exportação para Excel');
+    }
+  };
+  
+  // Função para exportar documentos em CSV filtrados por período
+  const exportCSVByPeriod = () => {
+    // Fechar o diálogo de exportação
+    setExportDialogOpen(false);
+    
+    // Remover qualquer toast que possa estar ativo
+    toast.dismiss();
+    
+    // Filtrar documentos pelo período selecionado
+    const filteredDocs = filterByPeriod(documents, exportPeriod);
+    
+    if (filteredDocs.length === 0) {
+      toast.error('Nenhum documento encontrado no período selecionado');
+      return;
+    }
+    
+    try {
+      // Exportar para CSV sem mostrar toast de processamento
+      const success = exportToCSV(filteredDocs, 'Documentos_Fiscais');
+      
+      // Remover qualquer toast pendente
+      toast.dismiss();
+      
+      if (success) {
+        toast.success(`${filteredDocs.length} documentos exportados com sucesso em formato CSV`);
+      } else {
+        toast.error('Falha ao exportar documentos para CSV');
+      }
+    } catch (error) {
+      // Remover qualquer toast pendente
+      toast.dismiss();
+      console.error('Erro ao exportar para CSV:', error);
+      toast.error('Falha na exportação para CSV');
+    }
+  };
+
+  // Função que executa a exportação baseada no formato selecionado
+  const handleExportByPeriod = () => {
+    switch (exportFormat) {
+      case 'pdf':
+        exportDocumentsByPeriod();
+        break;
+      case 'excel':
+        exportExcelByPeriod();
+        break;
+      case 'csv':
+        exportCSVByPeriod();
+        break;
+      default:
+        toast.error('Formato de exportação inválido');
+        setExportDialogOpen(false);
+    }
+  };
+
   return (
     <MainLayout>
-      <AlertDialog open={showPrintDialog} onOpenChange={setShowPrintDialog}>
+      {/* Email Dialog */}
+      <AlertDialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Enviar Documento por E-mail</AlertDialogTitle>
+            <AlertDialogDescription>
+              Digite o endereço de e-mail para enviar o documento {documentToEmail?.type.toUpperCase()}-{documentToEmail?.number}.
+              <div className="mt-2 text-green-600 text-sm">
+                O documento será enviado automaticamente para o e-mail informado com PDF anexado.
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <Input 
+              type="email" 
+              placeholder="Email do cliente" 
+              value={emailTo} 
+              onChange={(e) => setEmailTo(e.target.value)}
+              className="w-full"
+              disabled={isSendingEmail}
+              autoFocus
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSendingEmail}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleSendEmailConfirm} 
+              disabled={isSendingEmail || !emailTo.trim()}
+            >
+              {isSendingEmail ? 'Enviando...' : 'Enviar Email'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      
+      <AlertDialog open={printDialogOpen} onOpenChange={setPrintDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Opções de Impressão</AlertDialogTitle>
@@ -627,32 +985,63 @@ const Documents: React.FC = () => {
                         </Select>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
+                    <TableCell className="w-24">
+                      <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handlePrint(doc)}
+                          className="h-8 w-8"
+                          onClick={() => navigate(`/documents/${doc.id}`)}
+                          title="Ver detalhes"
                         >
-                          <PrinterIcon className="w-4 h-4" />
+                          <FileTextIcon className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleDownload(doc)}
+                          className="h-8 w-8"
+                          disabled={doc.status === 'Cancelada'}
+                          onClick={() => navigate(`/documents/${doc.id}`, { state: { openEditMode: true } })}
+                          title="Editar documento"
                         >
-                          <DownloadIcon className="w-4 h-4" />
+                          <PencilIcon className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(doc.id);
-                          }}
-                        >
-                          <TrashIcon className="w-4 h-4" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreVerticalIcon className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuGroup>
+                              <DropdownMenuItem onClick={() => navigate(`/documents/${doc.id}`)}>
+                                <FileTextIcon className="mr-2 h-4 w-4" />
+                                <span>Detalhes</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handlePrint(doc)}
+                                disabled={isPrintLoading}
+                              >
+                                <PrinterIcon className="mr-2 h-4 w-4" />
+                                <span>Imprimir</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleChangeStatus(doc.id, doc.status === 'Emitida' ? 'Cancelada' : 'Emitida')}
+                                disabled={doc.status === 'Cancelada'}
+                              >
+                                <FileCheckIcon className="mr-2 h-4 w-4" />
+                                <span>{doc.status === 'Emitida' ? 'Cancelar' : 'Marcar como Emitida'}</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => handleSendEmail(doc)}
+                                disabled={isSendingEmail}
+                              >
+                                <MailIcon className="mr-2 h-4 w-4" />
+                                <span>Enviar por E-mail</span>
+                              </DropdownMenuItem>
+                            </DropdownMenuGroup>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -677,22 +1066,64 @@ const Documents: React.FC = () => {
         </Card>
       </motion.div>
 
-      <AlertDialog open={!!documentToDelete} onOpenChange={(open) => !open && setDocumentToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir documento?</AlertDialogTitle>
-            <AlertDialogDescription>
-              O documento será movido para a lixeira. Você poderá restaurá-lo posteriormente se necessário.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Diálogo de exportação por período */}
+      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Exportar Documentos para {exportFormat.toUpperCase()}</DialogTitle>
+            <DialogDescription>
+              Selecione o período para exportação dos documentos:
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="grid grid-cols-1 gap-2">
+              <label className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  name="exportPeriod"
+                  checked={exportPeriod === '7days'}
+                  onChange={() => setExportPeriod('7days')}
+                  className="form-radio h-4 w-4"
+                />
+                <span>Últimos 7 dias</span>
+              </label>
+              <label className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  name="exportPeriod"
+                  checked={exportPeriod === '1month'}
+                  onChange={() => setExportPeriod('1month')}
+                  className="form-radio h-4 w-4"
+                />
+                <span>Último mês</span>
+              </label>
+              <label className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  name="exportPeriod"
+                  checked={exportPeriod === '12months'}
+                  onChange={() => setExportPeriod('12months')}
+                  className="form-radio h-4 w-4"
+                />
+                <span>Últimos 12 meses</span>
+              </label>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {exportFormat === 'pdf' 
+                ? 'Cada nota fiscal será exibida em uma página separada no arquivo PDF.' 
+                : `Os documentos serão exportados em formato ${exportFormat.toUpperCase()} com todos os dados disponíveis.`}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExportDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleExportByPeriod}>
+              Exportar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 };

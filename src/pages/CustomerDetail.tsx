@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -14,12 +13,14 @@ import {
   SmartphoneIcon,
   FileTextIcon,
   PlusIcon,
-  FileIcon
+  FileIcon,
+  TrashIcon
 } from 'lucide-react';
-import MainLayout from '@/components/layout/MainLayout';
-import { Button } from '@/components/ui/button';
-import ServiceCard from '@/components/ui/ServiceCard';
+import MainLayout from '../components/layout/MainLayout';
+import { Button } from '../components/ui/button';
+import ServiceCard from '../components/ui/ServiceCard';
 import { toast } from 'sonner';
+import { moveCustomerToTrash } from '../lib/trash-utils';
 import {
   Table,
   TableBody,
@@ -27,7 +28,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "../components/ui/table";
 
 interface Document {
   id: string;
@@ -128,6 +129,29 @@ const CustomerDetail: React.FC = () => {
   // Handle new document click
   const handleNewDocument = (type: 'nfe' | 'nfce' | 'nfse' = 'nfe') => {
     navigate('/documents/new', { state: { customerId: customer?.id, documentType: type } });
+  };
+  
+  // Handle moving customer to trash
+  const handleMoveToTrash = () => {
+    if (!customer?.id) return;
+    
+    try {
+      const success = moveCustomerToTrash(customer.id);
+      if (success) {
+        toast.success(`Cliente "${customer.name}" movido para a lixeira`);
+        navigate('/customers');
+      } else {
+        toast.error('Erro ao mover cliente para a lixeira');
+      }
+    } catch (error) {
+      console.error('Error moving customer to trash:', error);
+      toast.error('Erro ao mover cliente para a lixeira');
+    }
+  };
+  
+  // Handle navigation to service details
+  const handleServiceClick = (serviceId: string) => {
+    navigate(`/services/${serviceId}`);
   };
   
   if (loading) {
@@ -244,15 +268,26 @@ const CustomerDetail: React.FC = () => {
                   </div>
                 </div>
                 
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="gap-1"
-                  onClick={() => navigate(`/customers/edit/${customer.id}`)}
-                >
-                  <EditIcon size={16} />
-                  <span>Editar</span>
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="gap-1"
+                    onClick={() => navigate(`/customers/edit/${customer.id}`)}
+                  >
+                    <EditIcon size={16} />
+                    <span>Editar</span>
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="gap-1 text-red-600 hover:bg-red-50"
+                    onClick={handleMoveToTrash}
+                  >
+                    <TrashIcon size={16} />
+                    <span>Lixeira</span>
+                  </Button>
+                </div>
               </div>
               
               <div className="space-y-4 mt-6">
@@ -385,7 +420,8 @@ const CustomerDetail: React.FC = () => {
                     <ServiceCard 
                       key={service.id} 
                       service={service} 
-                      index={idx} 
+                      index={idx}
+                      onClick={handleServiceClick}
                     />
                   ))
                 ) : (

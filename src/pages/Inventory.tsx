@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
@@ -122,16 +121,22 @@ const Inventory: React.FC = () => {
     
     // Then apply stock filter
     if (stockFilter === 'critical') {
-      filtered = filtered.filter(item => Number(item.currentStock) === 0);
+      filtered = filtered.filter(item => {
+        const currentStock = Number(item.currentStock) || 0;
+        return currentStock === 0;
+      });
     } else if (stockFilter === 'low') {
-      filtered = filtered.filter(item => 
-        Number(item.currentStock) > 0 && 
-        Number(item.currentStock) < Number(item.minimumStock)
-      );
+      filtered = filtered.filter(item => {
+        const currentStock = Number(item.currentStock) || 0;
+        const minimumStock = Number(item.minimumStock) || 0;
+        return currentStock > 0 && currentStock < minimumStock;
+      });
     } else if (stockFilter === 'ok') {
-      filtered = filtered.filter(item => 
-        Number(item.currentStock) >= Number(item.minimumStock)
-      );
+      filtered = filtered.filter(item => {
+        const currentStock = Number(item.currentStock) || 0;
+        const minimumStock = Number(item.minimumStock) || 0;
+        return currentStock >= minimumStock && minimumStock > 0;
+      });
     }
     
     // Then apply any additional filters
@@ -186,13 +191,28 @@ const Inventory: React.FC = () => {
       return;
     }
     
+    // Validar valores numéricos
+    const currentStock = Number(formData.currentStock);
+    const minimumStock = Number(formData.minimumStock);
+    const price = Number(formData.price);
+    
+    if (isNaN(currentStock) || isNaN(minimumStock) || isNaN(price)) {
+      toast.error("Os valores de estoque e preço devem ser números válidos.");
+      return;
+    }
+    
+    if (currentStock < 0 || minimumStock < 0 || price < 0) {
+      toast.error("Os valores de estoque e preço não podem ser negativos.");
+      return;
+    }
+    
     try {
       // Add the new item to inventory
       const newItem = {
         ...formData,
-        price: Number(formData.price),
-        currentStock: Number(formData.currentStock),
-        minimumStock: Number(formData.minimumStock)
+        price: price,
+        currentStock: currentStock,
+        minimumStock: minimumStock
       };
       
       setInventoryItems(prev => [newItem, ...prev]);
@@ -223,14 +243,35 @@ const Inventory: React.FC = () => {
   };
   
   const handleSaveEditItem = () => {
+    // Validate required fields
+    if (!formData.name || !formData.category || !formData.currentStock) {
+      toast.error("Por favor, preencha todos os campos obrigatórios.");
+      return;
+    }
+    
+    // Validar valores numéricos
+    const currentStock = Number(formData.currentStock);
+    const minimumStock = Number(formData.minimumStock);
+    const price = Number(formData.price);
+    
+    if (isNaN(currentStock) || isNaN(minimumStock) || isNaN(price)) {
+      toast.error("Os valores de estoque e preço devem ser números válidos.");
+      return;
+    }
+    
+    if (currentStock < 0 || minimumStock < 0 || price < 0) {
+      toast.error("Os valores de estoque e preço não podem ser negativos.");
+      return;
+    }
+    
     try {
       // Update the item in the inventory
       const updatedItems = inventoryItems.map(item => 
         item.id === formData.id ? {
           ...formData,
-          price: Number(formData.price),
-          currentStock: Number(formData.currentStock),
-          minimumStock: Number(formData.minimumStock)
+          price: price,
+          currentStock: currentStock,
+          minimumStock: minimumStock
         } : item
       );
       
@@ -364,31 +405,6 @@ const Inventory: React.FC = () => {
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                  <DownloadIcon size={16} />
-                  <span className="hidden sm:inline">Exportar</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56">
-                <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => exportInventory('pdf')}>
-                    <DownloadIcon className="mr-2 h-4 w-4" />
-                    <span>Exportar como PDF</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => exportInventory('excel')}>
-                    <DownloadIcon className="mr-2 h-4 w-4" />
-                    <span>Exportar como Excel</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => exportInventory('csv')}>
-                    <DownloadIcon className="mr-2 h-4 w-4" />
-                    <span>Exportar como CSV</span>
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
         
@@ -411,7 +427,7 @@ const Inventory: React.FC = () => {
             <ShieldAlertIcon size={16} className="text-red-600" />
             <span>Estoque crítico</span>
             <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
-              {inventoryItems.filter(i => Number(i.currentStock) === 0).length}
+              {inventoryItems.filter(i => (Number(i.currentStock) || 0) === 0).length}
             </span>
           </Button>
           <Button 
@@ -422,10 +438,11 @@ const Inventory: React.FC = () => {
             <AlertCircleIcon size={16} className="text-amber-500" />
             <span>Estoque baixo</span>
             <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
-              {inventoryItems.filter(i => 
-                Number(i.currentStock) > 0 && 
-                Number(i.currentStock) < Number(i.minimumStock)
-              ).length}
+              {inventoryItems.filter(i => {
+                const currentStock = Number(i.currentStock) || 0;
+                const minimumStock = Number(i.minimumStock) || 0;
+                return currentStock > 0 && currentStock < minimumStock;
+              }).length}
             </span>
           </Button>
           <Button 
@@ -436,9 +453,11 @@ const Inventory: React.FC = () => {
             <CheckIcon size={16} className="text-green-600" />
             <span>Estoque adequado</span>
             <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
-              {inventoryItems.filter(i => 
-                Number(i.currentStock) >= Number(i.minimumStock)
-              ).length}
+              {inventoryItems.filter(i => {
+                const currentStock = Number(i.currentStock) || 0;
+                const minimumStock = Number(i.minimumStock) || 0;
+                return currentStock >= minimumStock && minimumStock > 0;
+              }).length}
             </span>
           </Button>
         </div>
@@ -510,21 +529,32 @@ const Inventory: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          {Number(item.currentStock) === 0 ? (
-                            <div className="px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-medium">
-                              Crítico
-                            </div>
-                          ) : Number(item.currentStock) < Number(item.minimumStock) ? (
-                            <div className="px-2 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-medium">
-                              Baixo
-                            </div>
-                          ) : (
-                            <div className="px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">
-                              OK
-                            </div>
-                          )}
-                          <span className="ml-2">{item.currentStock}</span>
-                          <span className="text-muted-foreground text-xs ml-1">/ {item.minimumStock} min</span>
+                          {(() => {
+                            const currentStock = Number(item.currentStock) || 0;
+                            const minimumStock = Number(item.minimumStock) || 0;
+                            
+                            if (currentStock === 0) {
+                              return (
+                                <div className="px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-medium">
+                                  Crítico
+                                </div>
+                              );
+                            } else if (currentStock < minimumStock) {
+                              return (
+                                <div className="px-2 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-medium">
+                                  Baixo
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div className="px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">
+                                  OK
+                                </div>
+                              );
+                            }
+                          })()}
+                          <span className="ml-2">{item.currentStock || 0}</span>
+                          <span className="text-muted-foreground text-xs ml-1">/ {item.minimumStock || 0} min</span>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">

@@ -1,9 +1,7 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from '@/components/ui/use-toast';
-import { auth, googleProvider } from '@/lib/firebase';
-import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { toast } from '../components/ui/use-toast';
+import { supabase, signInWithGoogle as supabaseSignInWithGoogle, signOut, getCurrentUser } from '../lib/supabase';
 
 interface User {
   id: string;
@@ -14,7 +12,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (emailOrUsername: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -34,33 +32,100 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const navigate = useNavigate();
 
-  // Load user from localStorage on mount
+  // Carregar usuário do Supabase Auth ao inicializar
   useEffect(() => {
-    const loadUserFromStorage = () => {
-      const storedUser = localStorage.getItem('pauloCell_user');
-      if (storedUser) {
-        try {
-          const parsedUser = JSON.parse(storedUser);
-          setUser(parsedUser);
-          console.log('User loaded from localStorage:', parsedUser);
-        } catch (error) {
-          console.error('Error parsing stored user:', error);
-          localStorage.removeItem('pauloCell_user');
+    const loadUser = async () => {
+      try {
+        const supabaseUser = await getCurrentUser();
+        
+        if (supabaseUser) {
+          const user = {
+            id: supabaseUser.id,
+            name: supabaseUser.user_metadata?.full_name || 'Usuário',
+            email: supabaseUser.email || ''
+          };
+          setUser(user);
+          console.log('Usuário carregado do Supabase Auth:', user);
+        } else {
+          // Fallback para localStorage para compatibilidade com versões anteriores
+          const storedUser = localStorage.getItem('pauloCell_user');
+          if (storedUser) {
+            try {
+              const parsedUser = JSON.parse(storedUser);
+              setUser(parsedUser);
+              console.log('Usuário carregado do localStorage (legado):', parsedUser);
+            } catch (error) {
+              console.error('Erro ao analisar o usuário armazenado:', error);
+              localStorage.removeItem('pauloCell_user');
+            }
+          }
         }
+      } catch (error) {
+        console.error('Erro ao carregar usuário:', error);
       }
     };
     
-    loadUserFromStorage();
+    // Configurar evento de alteração de auth do Supabase
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        console.log(`Evento Auth Supabase: ${event}`);
+        if (event === 'SIGNED_IN' && session?.user) {
+          const supabaseUser = session.user;
+          const user = {
+            id: supabaseUser.id,
+            name: supabaseUser.user_metadata?.full_name || 'Usuário',
+            email: supabaseUser.email || ''
+          };
+          setUser(user);
+          localStorage.setItem('pauloCell_user', JSON.stringify(user));
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          localStorage.removeItem('pauloCell_user');
+        }
+      }
+    );
+    
+    loadUser();
+    
+    // Limpar listener quando componente é desmontado
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
     try {
-      // For demo purposes, using hardcoded credentials
-      if (email === 'paullo.celullar2020@gmail.com' && password === 'paulocell@admin') {
+      // Usar Supabase para login com email/senha
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      
+      if (error) throw error;
+      
+      if (data?.user) {
+        const user = {
+          id: data.user.id,
+          name: data.user.user_metadata?.full_name || 'Usuário',
+          email: data.user.email || ''
+        };
+        setUser(user);
+        localStorage.setItem('pauloCell_user', JSON.stringify(user));
+        
+        toast({
+          title: 'Login realizado com sucesso!',
+          description: 'Bem-vindo ao sistema Paulo Cell.'
+        });
+        
+        navigate('/dashboard');
+      }
+    } catch (error) {
+      // Fallback para autenticação local (para compatibilidade durante transição)
+      if ((email === 'paullo.celullar2020@gmail.com' || email === 'paulocell') && password === 'paulocell@admin') {
         const user = {
           id: '1',
           name: 'Paulo Cell Admin',
-          email: email
+          email: email === 'paulocell' ? 'paullo.celullar2020@gmail.com' : email
         };
         setUser(user);
         localStorage.setItem('pauloCell_user', JSON.stringify(user));
@@ -69,10 +134,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           description: 'Bem-vindo ao sistema Paulo Cell.'
         });
         navigate('/dashboard');
-      } else {
-        throw new Error('Credenciais inválidas');
+        return;
       }
-    } catch (error) {
+      
+      console.error('Erro de login:', error);
       toast({
         variant: 'destructive',
         title: 'Erro ao fazer login',
@@ -83,72 +148,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginWithGoogle = async () => {
     try {
-      // Clear any previous error messages
+      // Limpar mensagens de erro anteriores
       const errorElement = document.getElementById('google-login-error');
       if (errorElement) {
         errorElement.textContent = '';
         errorElement.style.display = 'none';
       }
 
-      console.log('Iniciando login com Google...');
-      // Use signInWithRedirect instead of signInWithPopup to avoid popup blockers
-      const result = await signInWithPopup(auth, googleProvider);
-      console.log('Login com Google bem-sucedido:', result);
+      console.log('Iniciando login com Google (Supabase)...');
+      const { data, error } = await supabaseSignInWithGoogle();
       
-      // The signed-in user info
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      const user = result.user;
+      if (error) throw error;
       
-      console.log('Usuário autenticado:', user);
+      console.log('Login com Google iniciado:', data);
       
-      // Create a user object with the data we need
-      const newUser = {
-        id: user.uid,
-        name: user.displayName || 'Usuário Google',
-        email: user.email || ''
-      };
+      // O redirecionamento acontecerá automaticamente
+      // O usuário será processado pelo listener do onAuthStateChange quando retornar
       
-      setUser(newUser);
-      localStorage.setItem('pauloCell_user', JSON.stringify(newUser));
-      
-      toast({
-        title: 'Login realizado com sucesso!',
-        description: 'Bem-vindo ao sistema Paulo Cell.'
-      });
-      
-      navigate('/dashboard');
     } catch (error) {
-      console.error('Google login error:', error);
+      console.error('Erro no login com Google:', error);
       
-      // Provide more specific error messages based on error type
       let errorMessage = 'Ocorreu um erro ao fazer login com Google.';
       
       if (error instanceof Error) {
-        // Check for specific Firebase auth error codes
-        const errorCode = (error as any).code;
-        console.error('Código de erro:', errorCode);
-        console.error('Mensagem de erro completa:', error.message);
-        
-        if (errorCode === 'auth/popup-closed-by-user') {
-          errorMessage = 'O popup de login foi fechado antes de completar a autenticação.';
-        } else if (errorCode === 'auth/popup-blocked') {
-          errorMessage = 'O popup de login foi bloqueado pelo navegador. Por favor, permita popups para este site.';
-        } else if (errorCode === 'auth/cancelled-popup-request') {
-          errorMessage = 'A solicitação de login foi cancelada.';
-        } else if (errorCode === 'auth/network-request-failed') {
-          errorMessage = 'Falha na conexão de rede. Verifique sua conexão com a internet.';
-        } else if (errorCode === 'auth/invalid-api-key') {
-          errorMessage = 'A chave de API do Firebase é inválida. Contate o administrador do sistema.';
-        } else if (errorCode === 'auth/unauthorized-domain') {
-          errorMessage = 'Este domínio não está autorizado para operações OAuth. Contate o administrador do sistema.';
-        } else if (errorCode === 'auth/operation-not-allowed') {
-          errorMessage = 'O login com Google não está habilitado. Contate o administrador do sistema.';
-        } else if (errorCode === 'auth/internal-error') {
-          errorMessage = 'Ocorreu um erro interno no servidor de autenticação. Tente novamente mais tarde.';
-        } else {
-          // Use the actual error message if available
-          errorMessage = error.message || errorMessage;
-        }
+        errorMessage = error.message || errorMessage;
       }
       
       toast({
@@ -157,7 +180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: errorMessage
       });
       
-      // Display a UI element with the error message
+      // Exibir mensagem de erro na UI
       const errorElement = document.getElementById('google-login-error');
       if (errorElement) {
         errorElement.textContent = errorMessage;
@@ -168,20 +191,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = async (name: string, email: string, password: string) => {
     try {
-      // For demo purposes, store user in localStorage
-      const newUser = {
-        id: Date.now().toString(),
-        name,
-        email
-      };
-      setUser(newUser);
-      localStorage.setItem('pauloCell_user', JSON.stringify(newUser));
-      toast({
-        title: 'Cadastro realizado com sucesso!',
-        description: 'Bem-vindo ao sistema Paulo Cell.'
+      // Usar Supabase para registro
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: name
+          }
+        }
       });
-      navigate('/dashboard');
+      
+      if (error) throw error;
+      
+      if (data?.user) {
+        const user = {
+          id: data.user.id,
+          name,
+          email
+        };
+        setUser(user);
+        localStorage.setItem('pauloCell_user', JSON.stringify(user));
+        
+        toast({
+          title: 'Cadastro realizado com sucesso!',
+          description: 'Bem-vindo ao sistema Paulo Cell.'
+        });
+        
+        navigate('/dashboard');
+      }
     } catch (error) {
+      console.error('Erro no registro:', error);
       toast({
         variant: 'destructive',
         title: 'Erro ao fazer cadastro',
@@ -190,14 +230,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('pauloCell_user');
-    toast({
-      title: 'Logout realizado com sucesso!',
-      description: 'Até logo!'
-    });
-    navigate('/login');
+  const logout = async () => {
+    try {
+      // Fazer logout do Supabase
+      const { error } = await signOut();
+      if (error) throw error;
+      
+      setUser(null);
+      localStorage.removeItem('pauloCell_user');
+      
+      toast({
+        title: 'Logout realizado com sucesso!',
+        description: 'Até logo!'
+      });
+      
+      navigate('/login');
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error);
+      // Fazer logout local mesmo se o Supabase falhar
+      setUser(null);
+      localStorage.removeItem('pauloCell_user');
+      navigate('/login');
+    }
   };
 
   return (

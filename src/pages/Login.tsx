@@ -35,7 +35,15 @@ import { EyeIcon, EyeOffIcon, LockIcon, MailIcon } from 'lucide-react';
 
 // Form schema
 const loginFormSchema = z.object({
-  email: z.string().email('Digite um e-mail válido'),
+  email: z.string().refine(
+    (value) => {
+      // Accept either a valid email or the username 'paulocell'
+      return z.string().email().safeParse(value).success || value === 'paulocell';
+    },
+    {
+      message: 'Digite um e-mail válido ou o nome de usuário "paulocell"',
+    }
+  ),
   password: z.string().min(8, 'A senha deve ter pelo menos 8 caracteres'),
 });
 
@@ -117,12 +125,12 @@ const Login: React.FC = () => {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>E-mail</FormLabel>
+                      <FormLabel>E-mail ou Usuário</FormLabel>
                       <FormControl>
                         <div className="relative">
                           <MailIcon className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
                           <Input
-                            placeholder="seu@email.com"
+                            placeholder="seu@email.com ou nome de usuário"
                             className="pl-10"
                             {...field}
                           />
@@ -178,17 +186,6 @@ const Login: React.FC = () => {
               </form>
             </Form>
           </CardContent>
-          <CardFooter className="flex justify-center">
-            <p className="text-sm text-muted-foreground">
-              Não tem uma conta?{' '}
-              <Link
-                to="/register"
-                className="font-medium text-primary hover:underline"
-              >
-                Cadastre-se
-              </Link>
-            </p>
-          </CardFooter>
         </Card>
       </motion.div>
     </div>

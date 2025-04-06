@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { motion } from 'framer-motion';
 import MainLayout from '@/components/layout/MainLayout';
@@ -9,7 +8,6 @@ import DashboardHeader from '@/components/dashboard/DashboardHeader';
 import StatCardGrid from '@/components/dashboard/StatCardGrid';
 import RecentServices from '@/components/dashboard/RecentServices';
 import RecentCustomers from '@/components/dashboard/RecentCustomers';
-import LowStockItems from '@/components/dashboard/LowStockItems';
 import RecentDocuments from '@/components/dashboard/RecentDocuments';
 
 const Dashboard: React.FC = () => {
@@ -53,7 +51,6 @@ const Dashboard: React.FC = () => {
           
           <div className="space-y-6">
             <RecentCustomers customers={customers} />
-            <LowStockItems inventory={inventory} />
             <RecentDocuments documents={documents} />
           </div>
         </div>

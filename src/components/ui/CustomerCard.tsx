@@ -1,8 +1,7 @@
-
 import React from 'react';
 import { motion } from 'framer-motion';
-import { PhoneIcon, MailIcon, MoreVerticalIcon, TrashIcon } from 'lucide-react';
-import { moveCustomerToTrash } from '@/lib/trash-utils';
+import { MoreVerticalIcon, UserIcon, PhoneIcon, TrashIcon, MailIcon } from 'lucide-react';
+import { moveCustomerToTrash } from '../../lib/trash-utils';
 import { toast } from 'sonner';
 
 interface CustomerCardProps {

@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import { motion } from 'framer-motion';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,12 +32,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { initInvoiceApi, InvoiceApiConfig } from '@/lib/invoice-api';
+import { resetAllStatistics, resetVisualStatistics } from '../lib/reset-stats';
 
 const Settings: React.FC = () => {
   const location = useLocation();
   const stateTab = location.state?.openTab || null;
   const [activeTab, setActiveTab] = useState(stateTab || 'company');
   const [isResettingDatabase, setIsResettingDatabase] = useState(false);
+  const [isPasswordConfirmOpen, setIsPasswordConfirmOpen] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   
   // Company information state
   const [companyData, setCompanyData] = useState({
@@ -139,6 +142,26 @@ const Settings: React.FC = () => {
     toast.success('Configurações da API salvas com sucesso!');
   };
   
+  const handlePasswordConfirm = () => {
+    if (passwordInput === 'MilenaeNicolas') {
+      // Senha correta, proceder com o reset
+      handleResetDatabase();
+      setIsPasswordConfirmOpen(false);
+      setPasswordInput('');
+      setPasswordError('');
+    } else {
+      // Senha incorreta
+      setPasswordError('A senha digitada não corresponde à dica. Por favor, copie exatamente como mostrado.');
+    }
+  };
+  
+  const handleContinueToPasswordConfirm = () => {
+    // Fechar o diálogo de confirmação inicial
+    setIsResettingDatabase(false);
+    // Abrir o diálogo de confirmação de senha
+    setIsPasswordConfirmOpen(true);
+  };
+  
   const handleResetDatabase = () => {
     try {
       // Clear all app data from localStorage
@@ -146,53 +169,52 @@ const Settings: React.FC = () => {
       localStorage.removeItem('pauloCell_devices');
       localStorage.removeItem('pauloCell_services');
       localStorage.removeItem('pauloCell_inventory');
+      localStorage.removeItem('pauloCell_documents');
       
       // Keep the settings
       toast.success('Todos os dados foram apagados com sucesso!');
-      setIsResettingDatabase(false);
     } catch (error) {
       console.error('Error resetting database:', error);
       toast.error('Ocorreu um erro ao resetar os dados.');
     }
   };
   
-  const handleExportData = () => {
+  const handleResetStatistics = () => {
     try {
-      // Gather all app data
-      const exportData = {
-        customers: JSON.parse(localStorage.getItem('pauloCell_customers') || '[]'),
-        devices: JSON.parse(localStorage.getItem('pauloCell_devices') || '[]'),
-        services: JSON.parse(localStorage.getItem('pauloCell_services') || '[]'),
-        inventory: JSON.parse(localStorage.getItem('pauloCell_inventory') || '[]'),
-        companyData: JSON.parse(localStorage.getItem('pauloCell_companyData') || '{}'),
-        notificationSettings: JSON.parse(localStorage.getItem('pauloCell_notificationSettings') || '{}'),
-      };
-      
-      // Convert to JSON string
-      const jsonData = JSON.stringify(exportData, null, 2);
-      
-      // Create a blob and download link
-      const blob = new Blob([jsonData], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      
-      // Create and trigger download
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `pauloCell_backup_${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      
-      // Clean up
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      toast.success('Backup exportado com sucesso!');
+      const success = resetAllStatistics();
+      if (success) {
+        toast.success('Estatísticas reinicializadas com sucesso!');
+        // Recarregar a página após um breve delay para atualizar os dados
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } else {
+        toast.error('Erro ao reinicializar estatísticas');
+      }
     } catch (error) {
-      console.error('Error exporting data:', error);
-      toast.error('Ocorreu um erro ao exportar os dados.');
+      console.error('Erro ao reinicializar estatísticas:', error);
+      toast.error('Erro ao reinicializar estatísticas');
     }
   };
-  
+
+  const handleResetVisualStats = () => {
+    try {
+      const success = resetVisualStatistics();
+      if (success) {
+        toast.success('Estatísticas visuais reinicializadas!');
+        // Recarregar a página após um breve delay para atualizar os dados
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } else {
+        toast.error('Erro ao reinicializar estatísticas visuais');
+      }
+    } catch (error) {
+      console.error('Erro ao reinicializar estatísticas visuais:', error);
+      toast.error('Erro ao reinicializar estatísticas visuais');
+    }
+  };
+
   return (
     <MainLayout>
       <motion.div 
@@ -430,25 +452,7 @@ const Settings: React.FC = () => {
                 <div className="flex flex-col space-y-4">
                   <h3 className="text-md font-medium">Backup e Restauração</h3>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card className="p-4 border-dashed">
-                      <div className="flex flex-col h-full justify-between">
-                        <div>
-                          <h4 className="font-medium">Exportar Dados</h4>
-                          <p className="text-sm text-muted-foreground mt-2">
-                            Exporte todos os dados do sistema para um arquivo JSON. Você pode usar este arquivo para fazer backup ou transferir dados.
-                          </p>
-                        </div>
-                        <Button 
-                          className="mt-4 gap-2" 
-                          onClick={handleExportData}
-                        >
-                          <RefreshCwIcon size={16} />
-                          <span>Exportar Dados</span>
-                        </Button>
-                      </div>
-                    </Card>
-                    
+                  <div className="grid grid-cols-1 gap-4">
                     <Card className="p-4 border-dashed">
                       <div className="flex flex-col h-full justify-between">
                         <div>
@@ -489,10 +493,56 @@ const Settings: React.FC = () => {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction 
-              onClick={handleResetDatabase}
+              onClick={handleContinueToPasswordConfirm}
               className="bg-red-600 hover:bg-red-700"
             >
               Sim, resetar todos os dados
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      
+      {/* Password Confirmation Dialog */}
+      <AlertDialog open={isPasswordConfirmOpen} onOpenChange={setIsPasswordConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmação de Segurança</AlertDialogTitle>
+            <AlertDialogDescription>
+              Para confirmar a exclusão de todos os dados, copie a dica de senha abaixo e cole-a no campo de confirmação.
+              <div className="mt-4 p-3 bg-muted rounded-md font-medium text-center">
+                MilenaeNicolas
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="password-confirm">Cole a dica de senha aqui:</Label>
+              <Input
+                id="password-confirm"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder="Digite a senha exatamente como mostrada"
+              />
+              {passwordError && (
+                <p className="text-sm text-red-500">{passwordError}</p>
+              )}
+            </div>
+          </div>
+          
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setPasswordInput('');
+              setPasswordError('');
+            }}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handlePasswordConfirm}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={!passwordInput}
+            >
+              Excluir
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

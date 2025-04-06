@@ -38,6 +38,7 @@ const EditService: React.FC = () => {
     technicianId: '',
     estimatedCompletion: '',
     status: 'waiting',
+    priority: 'normal',
     notes: '',
   });
   
@@ -51,9 +52,36 @@ const EditService: React.FC = () => {
         const savedServices = localStorage.getItem('pauloCell_services');
         if (savedServices) {
           const services = JSON.parse(savedServices);
-          const foundService = services.find((s: any) => s.id === id);
+          let foundService = services.find((s: any) => s.id === id);
           
           if (foundService) {
+            // Verificar se o serviço deve ser marcado como concluído automaticamente
+            if (
+              foundService.estimatedCompletion && 
+              foundService.status !== 'completed' && 
+              foundService.status !== 'delivered'
+            ) {
+              const currentDate = new Date();
+              const [day, month, year] = foundService.estimatedCompletion.split('/').map(Number);
+              const estimatedDate = new Date(year, month - 1, day); // Mês em JS é 0-indexed
+              
+              // Se a data atual for posterior à data estimada, atualizar para concluído
+              if (currentDate > estimatedDate) {
+                foundService = { ...foundService, status: 'completed' };
+                
+                // Atualiza a lista completa de serviços no localStorage
+                const updatedServices = services.map((s: any) => 
+                  s.id === id ? foundService : s
+                );
+                localStorage.setItem('pauloCell_services', JSON.stringify(updatedServices));
+                
+                toast({
+                  title: "Status atualizado automaticamente",
+                  description: "O serviço foi marcado como concluído pois a data estimada foi ultrapassada.",
+                });
+              }
+            }
+            
             // Set form data from found service
             const serviceType = foundService.type || foundService.serviceType || '';
             const isCustomService = !['Troca de Tela', 'Substituição de Bateria', 'Reparo de Placa', 'Troca de Conector de Carga', 'Atualização de Software', 'Limpeza Interna'].includes(serviceType);
@@ -66,6 +94,7 @@ const EditService: React.FC = () => {
               technicianId: foundService.technicianId || '',
               estimatedCompletion: foundService.estimatedCompletion || '',
               status: foundService.status || 'waiting',
+              priority: foundService.priority || 'normal',
               notes: foundService.notes || '',
             });
             
@@ -228,10 +257,32 @@ const EditService: React.FC = () => {
       return;
     }
     
+    // Verifica se o serviço deve ser marcado como concluído automaticamente
+    let updatedStatus = formData.status;
+    if (
+      formData.estimatedCompletion && 
+      formData.status !== 'completed' && 
+      formData.status !== 'delivered'
+    ) {
+      const currentDate = new Date();
+      const [day, month, year] = formData.estimatedCompletion.split('/').map(Number);
+      const estimatedDate = new Date(year, month - 1, day); // Mês em JS é 0-indexed
+      
+      // Se a data atual for posterior à data estimada, atualizar para concluído
+      if (currentDate > estimatedDate) {
+        updatedStatus = 'completed';
+        toast({
+          title: "Status atualizado automaticamente",
+          description: "O serviço foi marcado como concluído pois a data estimada foi ultrapassada.",
+        });
+      }
+    }
+    
     // Create updated service data
     const updatedService = {
       ...services[serviceIndex],
       ...formData,
+      status: updatedStatus, // Usar o status atualizado
       type: formData.serviceType === 'outros' ? formData.customServiceType : formData.serviceType,
       parts: selectedParts,
       laborCost,
@@ -397,7 +448,24 @@ const EditService: React.FC = () => {
                     <SelectItem value="waiting">Aguardando</SelectItem>
                     <SelectItem value="in_progress">Em Andamento</SelectItem>
                     <SelectItem value="completed">Concluído</SelectItem>
-                    <SelectItem value="canceled">Cancelado</SelectItem>
+                    <SelectItem value="delivered">Entregue</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="priority">Prioridade</Label>
+                <Select 
+                  value={formData.priority}
+                  onValueChange={(value) => handleSelectChange('priority', value)}
+                >
+                  <SelectTrigger id="priority">
+                    <SelectValue placeholder="Selecione a prioridade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Baixa</SelectItem>
+                    <SelectItem value="normal">Normal</SelectItem>
+                    <SelectItem value="high">Alta</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { MenuIcon, PlusIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,6 +32,9 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
           >
             <MenuIcon size={20} />
           </button>
+          <div className="hidden md:flex flex-col">
+            <span className="font-medium text-sm"></span>
+          </div>
         </div>
         
         <div className="flex items-center gap-3">

@@ -11,8 +11,16 @@ import {
   SettingsIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  FileTextIcon
+  FileTextIcon,
+  RefreshCw,
+  ArrowRightLeft,
+  Trash2,
+  ReceiptIcon,
+  PlusIcon,
+  BadgeEuroIcon,
+  BarChart3
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -29,7 +37,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, toggleSidebar }) => {
     { path: '/services', name: 'Serviços', icon: WrenchIcon },
     { path: '/documents', name: 'Documentos', icon: FileTextIcon },
     { path: '/inventory', name: 'Estoque', icon: PackageIcon },
-    { path: '/reports', name: 'Relatórios', icon: BarChartIcon },
+    { path: '/reports', name: 'Relatórios', icon: BarChart3 },
     { path: '/settings', name: 'Configurações', icon: SettingsIcon },
   ];
   
@@ -125,7 +133,6 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, toggleSidebar }) => {
                   className="ml-3"
                 >
                   <div className="font-medium text-sidebar-foreground">Paulo Cell Sistema</div>
-                  <div className="text-xs text-sidebar-foreground/70">paulocell.com.br</div>
                 </motion.div>
               )}
             </AnimatePresence>

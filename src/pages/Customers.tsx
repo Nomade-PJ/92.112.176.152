@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -93,34 +92,6 @@ const Customers: React.FC = () => {
     navigate(`/customers/${id}`);
   };
   
-  const exportCustomers = (format: string) => {
-    try {
-      // Get the filtered customers to export
-      const dataToExport = filteredCustomers;
-      
-      // Use the appropriate export function based on format
-      switch (format.toLowerCase()) {
-        case 'pdf':
-          exportToPDF(dataToExport, 'Clientes');
-          break;
-        case 'excel':
-          exportToExcel(dataToExport, 'Clientes');
-          break;
-        case 'csv':
-          exportToCSV(dataToExport, 'Clientes');
-          break;
-        default:
-          toast.error('Formato de exportação não suportado');
-          return;
-      }
-      
-      toast.success(`Clientes exportados em formato ${format.toUpperCase()}`);
-    } catch (error) {
-      console.error('Error exporting customers:', error);
-      toast.error('Erro ao exportar clientes');
-    }
-  };
-
   const handleRefresh = () => {
     loadCustomers();
     toast.success('Lista de clientes atualizada!');
@@ -196,31 +167,6 @@ const Customers: React.FC = () => {
                   <DropdownMenuItem onClick={clearFilters}>
                     <XIcon className="mr-2 h-4 w-4" />
                     <span>Limpar Filtros</span>
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                  <DownloadIcon size={16} />
-                  <span className="hidden sm:inline">Exportar</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56">
-                <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => exportCustomers('pdf')}>
-                    <DownloadIcon className="mr-2 h-4 w-4" />
-                    <span>Exportar como PDF</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => exportCustomers('excel')}>
-                    <DownloadIcon className="mr-2 h-4 w-4" />
-                    <span>Exportar como Excel</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => exportCustomers('csv')}>
-                    <DownloadIcon className="mr-2 h-4 w-4" />
-                    <span>Exportar como CSV</span>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>

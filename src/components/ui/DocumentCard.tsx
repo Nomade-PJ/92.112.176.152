@@ -1,13 +1,13 @@
-
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { MoreVerticalIcon, FileTextIcon, PrinterIcon, DownloadIcon } from 'lucide-react';
+import { MoreVerticalIcon, FileTextIcon, PrinterIcon, DownloadIcon, MailIcon } from 'lucide-react';
 import { 
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { exportDocumentToPDF } from '@/lib/export-utils';
 import {
   AlertDialog,
@@ -27,6 +27,7 @@ interface DocumentCardProps {
     type: 'nfe' | 'nfce' | 'nfse';
     number: string;
     customer: string;
+    customerId?: string;
     date: string;
     value: number;
     status: 'Emitida' | 'Cancelada' | 'Pendente';
@@ -43,9 +44,178 @@ interface DocumentCardProps {
 
 const DocumentCard: React.FC<DocumentCardProps> = ({ document, index }) => {
   const [showPrintDialog, setShowPrintDialog] = useState(false);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [emailAddress, setEmailAddress] = useState('');
+  const [isEmailSending, setIsEmailSending] = useState(false);
   const [selectedColumns, setSelectedColumns] = useState<string[]>([
     'number', 'type', 'customer', 'date', 'value', 'status', 'paymentMethod'
   ]);
+  
+  // Function to handle sending document by email
+  const handleSendEmail = () => {
+    // Get customer email from localStorage using customerId
+    let customerEmail = '';
+    
+    if (document.customerId) {
+      try {
+        const savedCustomers = localStorage.getItem('pauloCell_customers');
+        if (savedCustomers) {
+          const customers = JSON.parse(savedCustomers);
+          const customer = customers.find((c: any) => c.id === document.customerId);
+          if (customer && customer.email) {
+            customerEmail = customer.email;
+            // Se temos o email, enviar diretamente
+            sendEmailDirectly(customerEmail);
+            return;
+          } else if (customer && customer.name) {
+            toast.info(`Cliente ${customer.name} encontrado, mas sem email cadastrado.`);
+          }
+        }
+      } catch (error) {
+        console.error("Erro ao buscar email do cliente:", error);
+      }
+    }
+    
+    // Se não encontrou email do cliente, tenta buscar de emissões anteriores
+    if (!customerEmail) {
+      try {
+        const savedDocuments = localStorage.getItem('pauloCell_documents');
+        if (savedDocuments) {
+          const allDocs = JSON.parse(savedDocuments);
+          // Buscar documentos do mesmo cliente (por nome, já que pode não ter ID)
+          const customerDocs = allDocs.filter((d: any) => 
+            d.customer === document.customer && d.id !== document.id
+          );
+          
+          // Ordena do mais recente para o mais antigo
+          customerDocs.sort((a: any, b: any) => 
+            new Date(b.date).getTime() - new Date(a.date).getTime()
+          );
+          
+          // Procura um email usado anteriormente
+          for (const prevDoc of customerDocs) {
+            if (prevDoc.emailSentTo) {
+              customerEmail = prevDoc.emailSentTo;
+              // Se encontrou um email anterior, perguntar se deve usar
+              toast.message(
+                `Email encontrado em documento anterior: ${customerEmail}`,
+                {
+                  action: {
+                    label: "Usar este email",
+                    onClick: () => sendEmailDirectly(customerEmail)
+                  },
+                  duration: 5000
+                }
+              );
+              break;
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Erro ao buscar email em documentos anteriores:", error);
+      }
+    }
+    
+    // Se ainda não enviou o email, mostrar o diálogo
+    if (!customerEmail) {
+      setEmailAddress('');
+      setShowEmailDialog(true);
+    }
+  };
+  
+  // Função para enviar email diretamente sem mostrar diálogo
+  const sendEmailDirectly = async (email: string) => {
+    if (!email || !email.trim()) {
+      toast.error('Email inválido');
+      return;
+    }
+    
+    try {
+      setIsEmailSending(true);
+      
+      // Remover qualquer toast existente
+      toast.dismiss();
+      
+      // Import the email utility
+      const { sendDocumentByEmail } = await import('@/lib/email-utils');
+      
+      // Send the email
+      const success = await sendDocumentByEmail(document as any, email);
+      
+      if (success) {
+        // Salvar o email usado para futuros envios
+        try {
+          const savedDocuments = localStorage.getItem('pauloCell_documents');
+          if (savedDocuments) {
+            const allDocs = JSON.parse(savedDocuments);
+            const updatedDocs = allDocs.map((d: any) => {
+              if (d.id === document.id) {
+                // Adicionar campo emailSentTo para rastrear o email usado
+                return { ...d, emailSentTo: email };
+              }
+              return d;
+            });
+            localStorage.setItem('pauloCell_documents', JSON.stringify(updatedDocs));
+          }
+        } catch (error) {
+          console.error("Erro ao salvar email usado:", error);
+        }
+        
+        toast.success('Documento enviado por email com sucesso');
+      }
+    } catch (error) {
+      console.error('Error sending document by email:', error);
+      toast.error('Erro ao enviar documento por email');
+    } finally {
+      setIsEmailSending(false);
+    }
+  };
+  
+  // Function to actually send the email
+  const handleSendEmailConfirm = async () => {
+    if (!emailAddress || !emailAddress.trim()) {
+      toast.error('Por favor, insira um email válido');
+      return;
+    }
+    
+    try {
+      setIsEmailSending(true);
+      setShowEmailDialog(false);
+      
+      // Import the email utility
+      const { sendDocumentByEmail } = await import('@/lib/email-utils');
+      
+      // Send the email
+      const success = await sendDocumentByEmail(document as any, emailAddress);
+      
+      if (success) {
+        // Salvar o email usado para futuros envios
+        try {
+          const savedDocuments = localStorage.getItem('pauloCell_documents');
+          if (savedDocuments) {
+            const allDocs = JSON.parse(savedDocuments);
+            const updatedDocs = allDocs.map((d: any) => {
+              if (d.id === document.id) {
+                // Adicionar campo emailSentTo para rastrear o email usado
+                return { ...d, emailSentTo: emailAddress };
+              }
+              return d;
+            });
+            localStorage.setItem('pauloCell_documents', JSON.stringify(updatedDocs));
+          }
+        } catch (error) {
+          console.error("Erro ao salvar email usado:", error);
+        }
+        
+        toast.success('Documento enviado por email com sucesso');
+      }
+    } catch (error) {
+      console.error('Error sending document by email:', error);
+      toast.error('Erro ao enviar documento por email');
+    } finally {
+      setIsEmailSending(false);
+    }
+  };
 
   const getStatusColor = () => {
     switch(document.status) {
@@ -100,6 +270,9 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, index }) => {
     if (!document) return;
 
     try {
+      // Fechar o diálogo imediatamente para evitar travamento
+      setShowPrintDialog(false);
+      
       // Import on demand to avoid circular references
       const { generateDocumentPrintContent } = require('@/lib/export-utils');
       const content = generateDocumentPrintContent(document, selectedColumns);
@@ -108,14 +281,25 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, index }) => {
       if (printWindow) {
         printWindow.document.write(content);
         printWindow.document.close();
+        
+        // Adicionar evento para detectar quando a janela é fechada
+        const checkWindowClosed = setInterval(() => {
+          if (printWindow.closed) {
+            clearInterval(checkWindowClosed);
+          }
+        }, 500);
+        
+        // Configurar callback para impressão
+        printWindow.onafterprint = () => {
+          printWindow.close();
+          clearInterval(checkWindowClosed);
+        };
+        
+        // Iniciar impressão após um breve delay
         setTimeout(() => {
           printWindow.print();
-          printWindow.onafterprint = () => {
-            printWindow.close();
-            setShowPrintDialog(false);
-          };
+          toast.success('Documento enviado para impressão');
         }, 250);
-        toast.success('Documento enviado para impressão');
       } else {
         toast.error('Não foi possível abrir a janela de impressão');
       }
@@ -142,6 +326,40 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, index }) => {
   
   return (
     <>
+      <AlertDialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Enviar Documento por E-mail</AlertDialogTitle>
+            <AlertDialogDescription>
+              Digite o endereço de e-mail para enviar o documento {document.type.toUpperCase()}-{document.number}.
+              <div className="mt-2 text-green-600 text-sm">
+                O documento será enviado automaticamente para o e-mail informado com PDF anexado.
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <Input 
+              type="email" 
+              placeholder="Email do cliente" 
+              value={emailAddress} 
+              onChange={(e) => setEmailAddress(e.target.value)}
+              className="w-full"
+              disabled={isEmailSending}
+              autoFocus
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isEmailSending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleSendEmailConfirm} 
+              disabled={isEmailSending || !emailAddress.trim()}
+            >
+              {isEmailSending ? 'Enviando...' : 'Enviar Email'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      
       <AlertDialog open={showPrintDialog} onOpenChange={setShowPrintDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -331,9 +549,9 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, index }) => {
                 <PrinterIcon className="mr-2 h-4 w-4" />
                 <span>Imprimir</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleDownload}>
-                <DownloadIcon className="mr-2 h-4 w-4" />
-                <span>Baixar PDF</span>
+              <DropdownMenuItem onClick={handleSendEmail}>
+                <MailIcon className="mr-2 h-4 w-4" />
+                <span>Enviar por E-mail</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

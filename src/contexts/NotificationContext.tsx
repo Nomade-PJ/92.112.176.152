@@ -1,5 +1,4 @@
-
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 export interface Notification {
   id: string;
@@ -36,6 +35,30 @@ export const useNotifications = () => {
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(true);
+  // Lista de IDs de documentos, serviços e itens que já foram notificados
+  const [processedItems, setProcessedItems] = useState<{
+    documents: string[];
+    services: string[];
+    inventory: string[];
+  }>({
+    documents: [],
+    services: [],
+    inventory: []
+  });
+  
+  // Definindo a função addNotification antes de ser usada
+  const addNotification = useCallback((notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
+    if (!notificationsEnabled) return;
+    
+    const newNotification: Notification = {
+      ...notification,
+      id: Date.now().toString(),
+      timestamp: Date.now(),
+      read: false,
+    };
+    
+    setNotifications(prev => [newNotification, ...prev]);
+  }, [notificationsEnabled]);
   
   // Load notifications and settings from localStorage on component mount
   useEffect(() => {
@@ -48,6 +71,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (savedSettings) {
       setNotificationsEnabled(JSON.parse(savedSettings).enabled);
     }
+    
+    // Carregar itens já processados
+    const savedProcessedItems = localStorage.getItem('pauloCell_processed_notifications');
+    if (savedProcessedItems) {
+      setProcessedItems(JSON.parse(savedProcessedItems));
+    }
   }, []);
   
   // Save notifications to localStorage whenever they change
@@ -59,6 +88,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   useEffect(() => {
     localStorage.setItem('pauloCell_notification_settings', JSON.stringify({ enabled: notificationsEnabled }));
   }, [notificationsEnabled]);
+  
+  // Salvar itens processados
+  useEffect(() => {
+    localStorage.setItem('pauloCell_processed_notifications', JSON.stringify(processedItems));
+  }, [processedItems]);
   
   // Auto-generate notifications for low inventory, overdue services, and pending documents
   useEffect(() => {
@@ -75,17 +109,29 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         
         // Only notify about low stock items that don't already have notifications
         lowStockItems.forEach((item: any) => {
-          const existingNotification = notifications.find(
-            (n) => n.title.includes('Estoque Baixo') && n.message.includes(item.name)
+          // Verifica se este item já foi processado
+          const currentProcessedItems = JSON.parse(localStorage.getItem('pauloCell_processed_notifications') || '{"inventory":[], "services":[], "documents":[]}');
+          if (currentProcessedItems.inventory.includes(item.id)) return;
+          
+          // Procura por notificações existentes
+          const currentNotifications = JSON.parse(localStorage.getItem('pauloCell_notifications') || '[]');
+          const existingNotification = currentNotifications.find(
+            (n: any) => n.title.includes('Estoque Baixo') && n.message.includes(item.name)
           );
           
           if (!existingNotification) {
+            // Adicionar notificação
             addNotification({
               title: 'Estoque Baixo',
               message: `${item.name} está com estoque abaixo do mínimo (${item.currentStock}/${item.minimumStock})`,
               type: 'warning',
               link: '/inventory',
             });
+            
+            // Adicionar à lista de itens processados
+            const updatedProcessedItems = {...currentProcessedItems};
+            updatedProcessedItems.inventory.push(item.id);
+            localStorage.setItem('pauloCell_processed_notifications', JSON.stringify(updatedProcessedItems));
           }
         });
       }
@@ -107,6 +153,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         
         // Only notify about overdue services that don't already have notifications
         overdueServices.forEach((service: any) => {
+          // Verifica se este serviço já foi processado
+          if (processedItems.services.includes(service.id)) return;
+          
           const existingNotification = notifications.find(
             (n) => n.title.includes('Serviço Atrasado') && n.message.includes(service.id)
           );
@@ -118,6 +167,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               type: 'error',
               link: `/services/${service.id}`,
             });
+            
+            // Adicionar à lista de serviços processados
+            setProcessedItems(prev => ({
+              ...prev,
+              services: [...prev.services, service.id]
+            }));
           }
         });
       }
@@ -130,6 +185,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         // Check for pending documents
         const pendingDocuments = documents.filter((doc: any) => doc.status === 'Pendente');
         pendingDocuments.forEach((document: any) => {
+          // Verifica se este documento já foi processado como pendente
+          const notificationKey = `pendente_${document.id}`;
+          if (processedItems.documents.includes(notificationKey)) return;
+          
           const existingNotification = notifications.find(
             (n) => n.title.includes('Documento Pendente') && n.message.includes(document.number)
           );
@@ -141,12 +200,22 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               type: 'info',
               link: `/documents/${document.id}`,
             });
+            
+            // Adicionar à lista de documentos processados
+            setProcessedItems(prev => ({
+              ...prev,
+              documents: [...prev.documents, notificationKey]
+            }));
           }
         });
         
         // Check for documents with invoice information from API
         const documentsWithInvoice = documents.filter((doc: any) => doc.invoiceId && doc.status === 'Emitida');
         documentsWithInvoice.forEach((document: any) => {
+          // Verifica se este documento já foi processado como emitido
+          const notificationKey = `emitido_${document.id}`;
+          if (processedItems.documents.includes(notificationKey)) return;
+          
           const existingNotification = notifications.find(
             (n) => n.title.includes('Documento Fiscal Emitido') && n.message.includes(document.number)
           );
@@ -158,6 +227,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               type: 'success',
               link: `/documents/${document.id}`,
             });
+            
+            // Adicionar à lista de documentos processados
+            setProcessedItems(prev => ({
+              ...prev,
+              documents: [...prev.documents, notificationKey]
+            }));
           }
         });
         
@@ -169,6 +244,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         );
         
         canceledDocuments.forEach((document: any) => {
+          // Verifica se este documento já foi processado como cancelado
+          const notificationKey = `cancelado_${document.id}`;
+          if (processedItems.documents.includes(notificationKey)) return;
+          
           const existingNotification = notifications.find(
             (n) => n.title.includes('Documento Fiscal Cancelado') && n.message.includes(document.number)
           );
@@ -180,6 +259,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               type: 'warning',
               link: `/documents/${document.id}`,
             });
+            
+            // Adicionar à lista de documentos processados
+            setProcessedItems(prev => ({
+              ...prev,
+              documents: [...prev.documents, notificationKey]
+            }));
           }
         });
       }
@@ -190,24 +275,77 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const interval = setInterval(checkForNotifications, 5 * 60 * 1000);
     
     return () => clearInterval(interval);
-  }, [notificationsEnabled]);
+  }, [notificationsEnabled, addNotification]);
+  
+  // Limpar itens processados antigos (mais de 30 dias)
+  useEffect(() => {
+    // Função para limpar itens processados antigos
+    const cleanupProcessedItems = () => {
+      // Obter todos os documentos, serviços e itens do estoque atuais
+      const currentDocuments: string[] = [];
+      const currentServices: string[] = [];
+      const currentInventory: string[] = [];
+      
+      try {
+        // Obter documentos ativos
+        const savedDocuments = localStorage.getItem('pauloCell_documents');
+        if (savedDocuments) {
+          const documents = JSON.parse(savedDocuments);
+          documents.forEach((doc: any) => {
+            currentDocuments.push(`pendente_${doc.id}`);
+            currentDocuments.push(`emitido_${doc.id}`);
+            currentDocuments.push(`cancelado_${doc.id}`);
+          });
+        }
+        
+        // Obter serviços ativos
+        const savedServices = localStorage.getItem('pauloCell_services');
+        if (savedServices) {
+          const services = JSON.parse(savedServices);
+          services.forEach((service: any) => {
+            currentServices.push(service.id);
+          });
+        }
+        
+        // Obter itens do estoque
+        const savedInventory = localStorage.getItem('pauloCell_inventory');
+        if (savedInventory) {
+          const inventory = JSON.parse(savedInventory);
+          inventory.forEach((item: any) => {
+            currentInventory.push(item.id);
+          });
+        }
+        
+        // Limpar itens que não existem mais
+        setProcessedItems(prev => ({
+          documents: prev.documents.filter(id => currentDocuments.includes(id)),
+          services: prev.services.filter(id => currentServices.includes(id)),
+          inventory: prev.inventory.filter(id => currentInventory.includes(id))
+        }));
+      } catch (error) {
+        console.error('Erro ao limpar itens processados:', error);
+      }
+    };
+    
+    // Limpar itens processados antigos a cada 24 horas
+    cleanupProcessedItems();
+    const cleanup = setInterval(cleanupProcessedItems, 24 * 60 * 60 * 1000);
+    
+    return () => clearInterval(cleanup);
+  }, []);
   
   const unreadCount = notifications.filter(notification => !notification.read).length;
   
-  const addNotification = (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
-    if (!notificationsEnabled) return;
-    
-    const newNotification: Notification = {
-      ...notification,
-      id: Date.now().toString(),
-      timestamp: Date.now(),
-      read: false,
-    };
-    
-    setNotifications(prev => [newNotification, ...prev]);
-  };
+  // Função para limitar a quantidade de notificações sendo exibidas
+  useEffect(() => {
+    // Mantém apenas as 50 notificações mais recentes para não sobrecarregar
+    if (notifications.length > 50) {
+      const sortedNotifications = [...notifications].sort((a, b) => b.timestamp - a.timestamp);
+      setNotifications(sortedNotifications.slice(0, 50));
+    }
+  }, [notifications]);
   
-  const markAsRead = (id: string) => {
+  const markAsRead = useCallback((id: string) => {
     setNotifications(prev =>
       prev.map(notification =>
         notification.id === id
@@ -215,25 +353,25 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           : notification
       )
     );
-  };
+  }, []);
   
-  const markAllAsRead = () => {
+  const markAllAsRead = useCallback(() => {
     setNotifications(prev =>
       prev.map(notification => ({ ...notification, read: true }))
     );
-  };
+  }, []);
   
-  const removeNotification = (id: string) => {
+  const removeNotification = useCallback((id: string) => {
     setNotifications(prev => prev.filter(notification => notification.id !== id));
-  };
+  }, []);
   
-  const clearAllNotifications = () => {
+  const clearAllNotifications = useCallback(() => {
     setNotifications([]);
-  };
+  }, []);
   
-  const toggleNotifications = () => {
+  const toggleNotifications = useCallback(() => {
     setNotificationsEnabled(prev => !prev);
-  };
+  }, []);
   
   return (
     <NotificationContext.Provider

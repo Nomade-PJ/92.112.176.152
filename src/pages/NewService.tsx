@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -40,6 +39,7 @@ const NewService: React.FC = () => {
     technicianId: '',
     estimatedCompletion: '',
     status: 'waiting',
+    priority: 'normal',
     notes: '',
   });
   
@@ -302,6 +302,23 @@ const NewService: React.FC = () => {
                     <SelectItem value="in_progress">Em andamento</SelectItem>
                     <SelectItem value="completed">Concluído</SelectItem>
                     <SelectItem value="delivered">Entregue</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="priority">Prioridade</Label>
+                <Select 
+                  value={formData.priority}
+                  onValueChange={(value) => handleSelectChange('priority', value)}
+                >
+                  <SelectTrigger id="priority">
+                    <SelectValue placeholder="Selecione a prioridade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Baixa</SelectItem>
+                    <SelectItem value="normal">Normal</SelectItem>
+                    <SelectItem value="high">Alta</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

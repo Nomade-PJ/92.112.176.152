@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Fundo laranja circular -->
+  <circle cx="256" cy="256" r="256" fill="#FF8C00" />
+  
+  <!-- Smartphone estilizado -->
+  <rect x="176" y="136" width="160" height="240" rx="16" fill="#FFFFFF" />
+  <rect x="192" y="152" width="128" height="200" rx="4" fill="#FF8C00" />
+  
+  <!-- Logo minimalista -->
+  <path d="M256 186 C276 186 290 200 290 220 C290 240 276 256 256 256 C236 256 222 240 222 220 C222 200 236 186 256 186 Z" fill="#FFFFFF" />
+  <path d="M230 246 C230 286 210 340 190 360 C210 366 230 360 250 336 C270 360 290 366 310 360 C290 340 270 286 270 246 Z" fill="#FFFFFF" />
+  
+  <!-- Ferramenta simplificada -->
+  <rect x="146" y="300" width="80" height="12" rx="6" transform="rotate(-45, 186, 306)" fill="#FFFFFF" />
+</svg> 

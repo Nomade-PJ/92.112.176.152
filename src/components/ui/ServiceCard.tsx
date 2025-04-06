@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { motion } from 'framer-motion';
 import { MoreVerticalIcon, WrenchIcon } from 'lucide-react';
@@ -14,11 +13,13 @@ interface ServiceCardProps {
     estimatedCompletion?: string;
     price: number | undefined;
     technician?: string;
+    priority?: 'low' | 'normal' | 'high';
   };
   index: number;
+  onClick?: (serviceId: string) => void;
 }
 
-const ServiceCard: React.FC<ServiceCardProps> = ({ service, index }) => {
+const ServiceCard: React.FC<ServiceCardProps> = ({ service, index, onClick }) => {
   const getStatusColor = () => {
     switch(service.status) {
       case 'waiting':
@@ -51,10 +52,11 @@ const ServiceCard: React.FC<ServiceCardProps> = ({ service, index }) => {
   
   return (
     <motion.div 
-      className="bg-card rounded-xl border border-border p-4 card-hover"
+      className="bg-card rounded-xl border border-border p-4 card-hover cursor-pointer transition-all hover:shadow-md"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.05 }}
+      onClick={() => onClick && onClick(service.id)}
     >
       <div className="flex justify-between items-start">
         <div className="flex gap-3">
@@ -68,6 +70,11 @@ const ServiceCard: React.FC<ServiceCardProps> = ({ service, index }) => {
               <div className={`text-xs px-2 py-0.5 rounded-full ml-2 ${getStatusColor()}`}>
                 {getStatusText()}
               </div>
+              {service.priority === 'high' && (
+                <div className="text-xs px-2 py-0.5 rounded-full ml-2 bg-red-100 text-red-700">
+                  Alta Prioridade
+                </div>
+              )}
             </div>
             
             <p className="text-sm text-muted-foreground mt-0.5">
@@ -79,7 +86,10 @@ const ServiceCard: React.FC<ServiceCardProps> = ({ service, index }) => {
           </div>
         </div>
         
-        <button className="p-1 rounded-full hover:bg-muted transition-colors">
+        <button 
+          className="p-1 rounded-full hover:bg-muted transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
           <MoreVerticalIcon size={18} />
         </button>
       </div>

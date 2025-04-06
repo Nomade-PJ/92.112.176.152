@@ -72,18 +72,21 @@ const DeviceDetail: React.FC = () => {
   
   const handleDelete = () => {
     try {
-      const savedDevices = localStorage.getItem('pauloCell_devices');
-      if (savedDevices) {
-        let devices = JSON.parse(savedDevices);
-        devices = devices.filter((d: any) => d.id !== id);
-        localStorage.setItem('pauloCell_devices', JSON.stringify(devices));
-      }
+      // Import the moveDeviceToTrash function
+      const { moveDeviceToTrash } = require('@/lib/device-trash-utils');
       
-      toast.success(`Dispositivo removido com sucesso`);
-      navigate('/devices');
+      // Move the device to trash instead of deleting it directly
+      const success = moveDeviceToTrash(id);
+      
+      if (success) {
+        toast.success(`Dispositivo movido para a lixeira`);
+        navigate('/devices');
+      } else {
+        toast.error('Erro ao mover dispositivo para a lixeira');
+      }
     } catch (error) {
-      console.error('Error deleting device:', error);
-      toast.error('Erro ao excluir dispositivo');
+      console.error('Error moving device to trash:', error);
+      toast.error('Erro ao mover dispositivo para a lixeira');
     }
   };
   

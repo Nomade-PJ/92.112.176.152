@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -90,6 +89,7 @@ const ServiceDetail: React.FC = () => {
   const { toast } = useToast();
   const [service, setService] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [updateText, setUpdateText] = useState('');
   
   // Load service data from localStorage
   useEffect(() => {
@@ -100,9 +100,36 @@ const ServiceDetail: React.FC = () => {
         const savedServices = localStorage.getItem('pauloCell_services');
         if (savedServices) {
           const services = JSON.parse(savedServices);
-          const foundService = services.find((s: any) => s.id === id);
+          let foundService = services.find((s: any) => s.id === id);
           
           if (foundService) {
+            // Verifica se o serviço deve ser marcado como concluído
+            if (
+              foundService.estimatedCompletion && 
+              foundService.status !== 'completed' && 
+              foundService.status !== 'delivered'
+            ) {
+              const currentDate = new Date();
+              const [day, month, year] = foundService.estimatedCompletion.split('/').map(Number);
+              const estimatedDate = new Date(year, month - 1, day); // Mês em JS é 0-indexed
+              
+              // Se a data atual for posterior à data estimada, atualizar para concluído
+              if (currentDate > estimatedDate) {
+                foundService = { ...foundService, status: 'completed' };
+                
+                // Atualiza a lista completa de serviços no localStorage
+                const updatedServices = services.map((s: any) => 
+                  s.id === id ? foundService : s
+                );
+                localStorage.setItem('pauloCell_services', JSON.stringify(updatedServices));
+                
+                toast({
+                  title: "Status atualizado automaticamente",
+                  description: "O serviço foi marcado como concluído pois a data estimada foi ultrapassada.",
+                });
+              }
+            }
+            
             setService(foundService);
           } else {
             toast({
@@ -224,6 +251,65 @@ const ServiceDetail: React.FC = () => {
   
   const calculateTotalParts = () => {
     return service.parts ? service.parts.reduce((total: number, part: any) => total + (part.price || 0), 0) : 0;
+  };
+  
+  const handleAddUpdate = () => {
+    if (!updateText.trim()) return;
+    
+    try {
+      // Formatar data e hora atual
+      const now = new Date();
+      const date = now.toLocaleDateString('pt-BR');
+      const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      
+      // Criar objeto de atualização
+      const newUpdate = {
+        date,
+        time,
+        message: updateText.trim(),
+        user: 'Usuário do Sistema' // Idealmente, usar o nome do usuário logado
+      };
+      
+      // Obter serviços do localStorage
+      const savedServices = localStorage.getItem('pauloCell_services');
+      if (savedServices) {
+        const services = JSON.parse(savedServices);
+        
+        // Encontrar e atualizar o serviço
+        const updatedServices = services.map((s: any) => {
+          if (s.id === id) {
+            // Adicionar a nova atualização ao array de atualizações
+            const updates = s.updates && Array.isArray(s.updates) ? [...s.updates, newUpdate] : [newUpdate];
+            return { ...s, updates };
+          }
+          return s;
+        });
+        
+        // Salvar no localStorage
+        localStorage.setItem('pauloCell_services', JSON.stringify(updatedServices));
+        
+        // Atualizar o estado do serviço
+        const updatedService = { 
+          ...service, 
+          updates: service.updates && Array.isArray(service.updates) ? [...service.updates, newUpdate] : [newUpdate] 
+        };
+        setService(updatedService);
+        
+        // Limpar o campo de texto
+        setUpdateText('');
+        
+        toast({
+          title: "Atualização adicionada",
+          description: "A atualização foi registrada com sucesso.",
+        });
+      }
+    } catch (error) {
+      console.error('Error adding update:', error);
+      toast({
+        title: "Erro ao adicionar atualização",
+        description: "Ocorreu um erro ao adicionar a atualização.",
+      });
+    }
   };
   
   return (
@@ -416,8 +502,16 @@ const ServiceDetail: React.FC = () => {
               <textarea 
                 className="w-full h-24 p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 placeholder="Digite uma atualização sobre o andamento do serviço..."
+                value={updateText}
+                onChange={(e) => setUpdateText(e.target.value)}
               />
-              <Button className="w-full">Adicionar Atualização</Button>
+              <Button 
+                className="w-full" 
+                onClick={handleAddUpdate}
+                disabled={!updateText.trim()}
+              >
+                Adicionar Atualização
+              </Button>
             </div>
           </Card>
         </div>

@@ -1,4 +1,3 @@
-
 import jsPDF from 'jspdf';
 // Import autotable dynamically to ensure compatibility with jsPDF v3
 import * as XLSX from 'xlsx';
@@ -25,11 +24,13 @@ const formatDataForExport = (data: ExportableData[]) => {
 export const exportToPDF = (data: ExportableData[], title: string) => {
   try {
     if (!data || data.length === 0) {
-      throw new Error('No data to export');
+      throw new Error('Nenhum dado para exportar');
     }
 
+    console.log(`Iniciando exportação de ${data.length} registros para PDF`);
+
     // Create a new jsPDF instance
-    const doc = new jsPDF();
+    const doc = new jsPDF('portrait', 'mm', 'a4');
     const formattedData = formatDataForExport(data);
 
     // Add title
@@ -39,26 +40,72 @@ export const exportToPDF = (data: ExportableData[], title: string) => {
 
     // Add data
     const headers = Object.keys(formattedData[0] || {});
-    const rows = formattedData.map(item => headers.map(header => item[header]));
+    const rows = formattedData.map(item => headers.map(header => {
+      // Formatação especial para valores monetários e datas
+      if (typeof item[header] === 'number' && (header.includes('valor') || header.includes('value') || header.includes('preco'))) {
+        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item[header]);
+      } else if (typeof item[header] === 'string' && header.includes('date')) {
+        try {
+          return new Date(item[header]).toLocaleDateString('pt-BR');
+        } catch (e) {
+          return item[header];
+        }
+      }
+      return item[header] === null || item[header] === undefined ? '' : item[header];
+    }));
 
-    // Using autoTable with proper import for jsPDF v3
-    import('jspdf-autotable').then((autoTable) => {
-      autoTable.default(doc, {
+    try {
+      // Usando autoTable diretamente
+      (doc as any).autoTable({
         head: [headers],
         body: rows,
         startY: 30,
         margin: { top: 25 },
         styles: { fontSize: 10 },
-        headStyles: { fillColor: [66, 139, 202] }
+        headStyles: { fillColor: [255, 140, 0], textColor: 255 } // Cor laranja para combinar com a identidade visual
       });
 
-      // Save the PDF after table is created
-      doc.save(`${title.toLowerCase().replace(/ /g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
-    });
-    
-    return true;
+      // Gerar nome de arquivo com data e hora para evitar duplicação
+      const timestamp = new Date().toISOString()
+        .replace(/[-:]/g, '')
+        .replace('T', '_')
+        .substring(0, 15);
+      
+      const filename = `${title.toLowerCase().replace(/ /g, '_')}_${timestamp}.pdf`;
+
+      try {
+        // Save the PDF after table is created
+        doc.save(filename);
+        console.log('PDF salvo com sucesso');
+        return true;
+      } catch (saveError) {
+        console.error('Erro ao salvar PDF com método padrão:', saveError);
+        
+        // Método alternativo para salvar o PDF em caso de erro
+        try {
+          console.log('Tentando método alternativo para salvar o PDF...');
+          const blob = doc.output('blob');
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          console.log('PDF salvo com método alternativo');
+          return true;
+        } catch (alternativeSaveError) {
+          console.error('Erro no método alternativo:', alternativeSaveError);
+          throw alternativeSaveError;
+        }
+      }
+    } catch (tableError) {
+      console.error('Erro ao gerar tabela no PDF:', tableError);
+      throw tableError;
+    }
   } catch (error) {
-    console.error('Error exporting to PDF:', error);
+    console.error('Erro ao exportar para PDF:', error);
     throw error;
   }
 };
@@ -183,21 +230,112 @@ export const exportDocumentToPDF = (document: ExportableData, selectedColumns: s
 export const exportToExcel = (data: ExportableData[], title: string) => {
   try {
     if (!data || data.length === 0) {
-      throw new Error('No data to export');
+      throw new Error('Nenhum dado para exportar');
     }
 
-    const formattedData = formatDataForExport(data);
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(formattedData);
+    console.log(`Iniciando exportação de ${data.length} registros para Excel`);
 
-    // Add the worksheet to the workbook
-    XLSX.utils.book_append_sheet(wb, ws, title);
+    // Prepara os dados formatando valores especiais
+    const formattedData = data.map(item => {
+      const formattedItem: ExportableData = {};
+      
+      // Processa as propriedades de primeiro nível
+      for (const [key, value] of Object.entries(item)) {
+        // Pula campos internos
+        if (key === 'id') continue;
+        
+        // Formatação especial para valores monetários
+        if (typeof value === 'number' && (key.includes('valor') || key.includes('value') || key.includes('preco'))) {
+          formattedItem[key] = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+        } 
+        // Formatação especial para datas
+        else if (typeof value === 'string' && (key.includes('date') || key.includes('data'))) {
+          try {
+            formattedItem[key] = new Date(value).toLocaleDateString('pt-BR');
+          } catch (e) {
+            formattedItem[key] = value;
+          }
+        }
+        // Processamento especial para arrays como items
+        else if (Array.isArray(value) && key === 'items') {
+          // Contar itens e calcular valor total
+          formattedItem['quantidade_itens'] = value.length;
+          
+          // Adicionar descrições dos primeiros 3 itens
+          value.slice(0, 3).forEach((item, index) => {
+            if (item.description) {
+              formattedItem[`item_${index + 1}`] = item.description;
+            }
+          });
+          
+          // Indicar se há mais itens
+          if (value.length > 3) {
+            formattedItem['mais_itens'] = `E mais ${value.length - 3} item(s)`;
+          }
+        }
+        // Processamento para objetos - extrair propriedades principais
+        else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          // Para objetos aninhados, extrair propriedades selecionadas
+          if (key === 'customer' && typeof value === 'object') {
+            formattedItem['customer_name'] = value.name || 'N/A';
+            if (value.email) formattedItem['customer_email'] = value.email;
+            if (value.phone) formattedItem['customer_phone'] = value.phone;
+          } else {
+            // Para outros objetos, apenas stringify
+            formattedItem[key] = JSON.stringify(value);
+          }
+        }
+        // Valores padrão
+        else {
+          formattedItem[key] = value === null || value === undefined ? '' : value;
+        }
+      }
+      
+      return formattedItem;
+    });
 
-    // Generate Excel file and trigger download
-    XLSX.writeFile(wb, `${title.toLowerCase().replace(/ /g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    // Converter para worksheet
+    const worksheet = XLSX.utils.json_to_sheet(formattedData);
+    
+    // Ajustar largura das colunas
+    const defaultColumnWidth = 18;
+    const columnWidths = {};
+    
+    Object.keys(formattedData[0] || {}).forEach(key => {
+      // Definir larguras personalizadas com base no tipo de coluna
+      if (key.includes('description') || key.includes('observ')) {
+        columnWidths[key] = 40; // Colunas de descrição mais largas
+      } else if (key.includes('date') || key.includes('data')) {
+        columnWidths[key] = 15; // Colunas de data com largura média
+      } else if (key.includes('value') || key.includes('valor') || key.includes('price')) {
+        columnWidths[key] = 15; // Colunas de valores financeiros
+      } else {
+        columnWidths[key] = defaultColumnWidth;
+      }
+    });
+    
+    worksheet['!cols'] = Object.keys(formattedData[0] || {}).map(key => ({ 
+      wch: columnWidths[key] || defaultColumnWidth 
+    }));
+    
+    // Criar workbook
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Dados');
+
+    // Gerar nome de arquivo com data e hora
+    const timestamp = new Date().toISOString()
+      .replace(/[-:]/g, '')
+      .replace('T', '_')
+      .substring(0, 15);
+    
+    const filename = `${title.toLowerCase().replace(/ /g, '_')}_${timestamp}.xlsx`;
+
+    // Salvar arquivo
+    XLSX.writeFile(workbook, filename);
+    console.log('Excel salvo com sucesso');
     return true;
   } catch (error) {
-    console.error('Error exporting to Excel:', error);
+    console.error('Erro ao exportar para Excel:', error);
     throw error;
   }
 };
@@ -206,28 +344,135 @@ export const exportToExcel = (data: ExportableData[], title: string) => {
 export const exportToCSV = (data: ExportableData[], title: string) => {
   try {
     if (!data || data.length === 0) {
-      throw new Error('No data to export');
+      throw new Error('Nenhum dado para exportar');
     }
 
-    const formattedData = formatDataForExport(data);
-    const csv = Papa.unparse(formattedData);
-    
-    // Create blob and download
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
+    console.log(`Iniciando exportação de ${data.length} registros para CSV`);
+
+    // Prepara os dados para CSV com formatação aprimorada
+    const formattedData = data.map(item => {
+      const formattedItem: ExportableData = {};
+      
+      // Processa as propriedades de primeiro nível
+      for (const [key, value] of Object.entries(item)) {
+        // Pula campos internos
+        if (key === 'id') continue;
+        
+        const formattedKey = key
+          .replace(/([A-Z])/g, ' $1') // Adiciona espaços antes de letras maiúsculas
+          .replace(/^./, str => str.toUpperCase()) // Capitaliza a primeira letra
+          .trim(); // Remove espaços extras
+        
+        // Formatação especial para valores monetários
+        if (typeof value === 'number' && (key.includes('valor') || key.includes('value') || key.includes('preco'))) {
+          formattedItem[formattedKey] = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+        } 
+        // Formatação especial para datas
+        else if (typeof value === 'string' && (key.includes('date') || key.includes('data'))) {
+          try {
+            formattedItem[formattedKey] = new Date(value).toLocaleDateString('pt-BR');
+          } catch (e) {
+            formattedItem[formattedKey] = value;
+          }
+        }
+        // Processamento especial para arrays como items
+        else if (Array.isArray(value) && key === 'items') {
+          // Contar itens e calcular valor total
+          formattedItem['Quantidade de Itens'] = value.length;
+          
+          // Adicionar descrições dos primeiros 3 itens
+          value.slice(0, 3).forEach((item, index) => {
+            if (item.description) {
+              formattedItem[`Item ${index + 1}`] = item.description;
+            }
+            if (item.quantity && item.unitValue) {
+              formattedItem[`Valor Item ${index + 1}`] = new Intl.NumberFormat('pt-BR', { 
+                style: 'currency', 
+                currency: 'BRL' 
+              }).format(item.quantity * item.unitValue);
+            }
+          });
+          
+          // Indicar se há mais itens
+          if (value.length > 3) {
+            formattedItem['Mais Itens'] = `E mais ${value.length - 3} item(s)`;
+          }
+        }
+        // Processamento para objetos - extrair propriedades principais
+        else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          // Para objetos aninhados, extrair propriedades selecionadas
+          if (key === 'customer' && typeof value === 'object') {
+            formattedItem['Nome Cliente'] = value.name || 'N/A';
+            if (value.email) formattedItem['Email Cliente'] = value.email;
+            if (value.phone) formattedItem['Telefone Cliente'] = value.phone;
+          } else {
+            try {
+              // Para outros objetos, apenas stringify
+              formattedItem[formattedKey] = JSON.stringify(value);
+            } catch (e) {
+              formattedItem[formattedKey] = '[Objeto Complexo]';
+            }
+          }
+        }
+        // Melhora para o tipo de documento
+        else if (key === 'type' && typeof value === 'string') {
+          const typeMap: Record<string, string> = {
+            'nfe': 'Nota Fiscal Eletrônica',
+            'nfce': 'Nota Fiscal de Consumidor Eletrônica',
+            'nfse': 'Nota Fiscal de Serviço Eletrônica'
+          };
+          formattedItem[formattedKey] = typeMap[value.toLowerCase()] || value;
+        }
+        // Status formatado
+        else if (key === 'status' && typeof value === 'string') {
+          formattedItem[formattedKey] = value.charAt(0).toUpperCase() + value.slice(1);
+        }
+        // Valores padrão
+        else {
+          formattedItem[formattedKey] = value === null || value === undefined ? '' : value;
+        }
+      }
+      
+      return formattedItem;
+    });
+
+    // Converte para CSV usando PapaParse
+    const csv = Papa.unparse(formattedData, {
+      delimiter: ";", // Usar ponto e vírgula para melhor compatibilidade com Excel em PT-BR
+      header: true,
+      quotes: true, // Colocar aspas em todos os campos para evitar problemas com delimitadores
+    });
+
+    // Adiciona BOM para garantir que caracteres especiais sejam exibidos corretamente
+    const csvContent = "\ufeff" + csv;
+
+    // Cria um blob e faz o download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     
-    link.setAttribute('href', url);
-    link.setAttribute('download', `${title.toLowerCase().replace(/ /g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
+    // Gerar nome de arquivo com data e hora para evitar duplicação
+    const timestamp = new Date().toISOString()
+      .replace(/[-:]/g, '')
+      .replace('T', '_')
+      .substring(0, 15);
     
+    const filename = `${title.toLowerCase().replace(/ /g, '_')}_${timestamp}.csv`;
+    
+    // Cria um elemento de link e simula o clique
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
     document.body.appendChild(link);
     link.click();
+    
+    // Limpa recursos
     document.body.removeChild(link);
-    URL.revokeObjectURL(url); // Clean up the URL object
+    URL.revokeObjectURL(url);
+    
+    console.log('CSV salvo com sucesso');
     return true;
   } catch (error) {
-    console.error('Error exporting to CSV:', error);
+    console.error('Erro ao exportar para CSV:', error);
     throw error;
   }
 };

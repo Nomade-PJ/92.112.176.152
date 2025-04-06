@@ -1,12 +1,11 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import MainLayout from '@/components/layout/MainLayout';
-import DocumentForm from '@/components/forms/DocumentForm';
+import MainLayout from '../components/layout/MainLayout';
+import DocumentForm from '../components/forms/DocumentForm';
 import { motion } from 'framer-motion';
 import { ArrowLeftIcon, AlertCircleIcon } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '../components/ui/button';
+import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
 import { toast } from 'sonner';
 
 interface LocationState {
@@ -75,55 +74,57 @@ const NewDocument: React.FC = () => {
   
   // Função para verificar endereço do cliente
   const checkCustomerAddress = (customerData: any) => {
-    if (!customerData) return;
-    
-    const missingFields = [];
-    
-    // Verificar se o cliente tem CPF/CNPJ
-    if (!customerData.document && !customerData.cpfCnpj) {
-      missingFields.push('CPF/CNPJ');
-    }
-    
-    // Para NF-e, verificamos todos os campos de endereço necessários
-    const requiredAddressFields = [
-      { field: 'address', name: 'Rua/Logradouro' },
-      { field: 'number', name: 'Número' },
-      { field: 'neighborhood', name: 'Bairro' },
-      { field: 'city', name: 'Cidade' },
-      { field: 'state', name: 'Estado' },
-      { field: 'postalCode', name: 'CEP' }
-    ];
-    
-    for (const { field, name } of requiredAddressFields) {
-      // Para campos especiais, verificar dentro do objeto de endereço se existir
-      if (field === 'number' || field === 'neighborhood') {
-        if (!customerData.address || !customerData.address[field] || customerData.address[field].trim() === '') {
-          missingFields.push(name);
-        }
-      } 
-      // Para campos simples, verificar diretamente no objeto do cliente
-      else if (field === 'address') {
-        if (!customerData[field] || customerData[field].trim() === '') {
-          missingFields.push(name);
-        }
+    try {
+      // Verificar se customerData existe
+      if (!customerData) {
+        return;
       }
-      // Campos que podem estar no objeto principal ou no objeto de endereço
-      else {
-        const hasField = (
-          (customerData[field] && customerData[field].trim() !== '') || 
-          (customerData.address && customerData.address[field] && customerData.address[field].trim() !== '')
-        );
+
+      const missingFields: string[] = [];
+
+      // Verificar CPF/CNPJ com verificação segura
+      const hasCpfCnpj = !!(customerData.document || customerData.cpfCnpj);
+      if (!hasCpfCnpj) {
+        missingFields.push('CPF/CNPJ');
+      }
+
+      // Lista de campos obrigatórios de endereço
+      const requiredAddressFields = [
+        { property: 'street', label: 'Rua/Logradouro', path: 'address.street' },
+        { property: 'number', label: 'Número', path: 'address.number' },
+        { property: 'neighborhood', label: 'Bairro', path: 'address.neighborhood' },
+        { property: 'city', label: 'Cidade', path: 'city' },
+        { property: 'state', label: 'Estado', path: 'state' },
+        { property: 'postalCode', label: 'CEP', path: 'postalCode' }
+      ];
+
+      // Verificar cada campo obrigatório
+      requiredAddressFields.forEach(field => {
+        let value;
         
-        if (!hasField) {
-          missingFields.push(name);
+        // Verificar se o campo está no objeto address ou diretamente no customerData
+        if (field.path.includes('address.')) {
+          const addressField = field.path.split('.')[1];
+          value = customerData.address?.[addressField];
+        } else {
+          value = customerData[field.property];
         }
+        
+        // Verificar se o campo existe e não está vazio
+        if (!value || (typeof value === 'string' && value.trim() === '')) {
+          missingFields.push(field.label);
+        }
+      });
+
+      if (missingFields.length > 0) {
+        setMissingAddressFields(missingFields);
+        setShowAddressAlert(true);
+      } else {
+        setShowAddressAlert(false);
       }
-    }
-    
-    if (missingFields.length > 0) {
-      setMissingAddressFields(missingFields);
-      setShowAddressAlert(true);
-    } else {
+    } catch (error) {
+      console.error('Erro ao verificar endereço do cliente:', error);
+      toast.error('Ocorreu um erro na verificação do endereço do cliente');
       setShowAddressAlert(false);
     }
   };

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -154,7 +153,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
     name: initialData.name || '',
     email: initialData.email || '',
     phone: initialData.phone || '',
-    address: initialData.address || '',
+    address: initialData.address?.street || initialData.address || '',
     city: initialData.city || '',
     state: initialData.state || '',
     postalCode: initialData.postalCode || '',
@@ -281,12 +280,23 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
         ...formData,
         // Create address object with proper fields for NF-e
         address: {
-          ...formData.addressDetail,
-          street: formData.address,
+          street: formData.address, // Armazena como string
+          number: formData.addressDetail.number,
+          neighborhood: formData.addressDetail.neighborhood,
+          complement: formData.addressDetail.complement,
           city: formData.city,
           state: formData.state,
           postalCode: formData.postalCode
         }
+      };
+      
+      // Remover campos duplicados desnecessários do objeto principal
+      const { address: originalAddress, ...customerData } = customerToSave;
+
+      // Cria o objeto final do cliente
+      const finalCustomerData = {
+        ...customerData,
+        address: originalAddress, // Usa o objeto de endereço estruturado
       };
       
       // Retrieve existing customers from localStorage
@@ -296,18 +306,18 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
       if (isEdit) {
         // Update existing customer
         customers = customers.map((customer: any) => 
-          customer.id === formData.id ? customerToSave : customer
+          customer.id === formData.id ? finalCustomerData : customer
         );
       } else {
         // Add new customer
-        customers.push(customerToSave);
+        customers.push(finalCustomerData);
       }
       
       // Save updated customers list to localStorage
       localStorage.setItem('pauloCell_customers', JSON.stringify(customers));
       
       if (onSubmit) {
-        onSubmit(customerToSave);
+        onSubmit(finalCustomerData);
       }
       
       toast.success(

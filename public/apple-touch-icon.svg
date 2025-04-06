@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180">
+  <!-- Fundo laranja circular -->
+  <circle cx="90" cy="90" r="90" fill="#FF8C00" />
+  
+  <!-- Smartphone estilizado -->
+  <rect x="55" y="40" width="70" height="100" rx="10" fill="#FFFFFF" />
+  <rect x="60" y="50" width="60" height="80" rx="5" fill="#FF8C00" />
+  
+  <!-- Logo P para Paulo Cell -->
+  <path d="M90 70 L105 70 C112 70 118 76 118 83 C118 90 112 96 105 96 L90 96 L90 70 Z" fill="#FFFFFF" />
+  <path d="M90 70 L90 110" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" />
+</svg> 

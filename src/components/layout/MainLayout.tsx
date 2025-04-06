@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import Sidebar from './Sidebar';
@@ -28,6 +27,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         >
           {children}
         </motion.main>
+        <footer className="py-2 px-6 border-t border-border text-center text-xs text-muted-foreground bg-background/50 backdrop-blur-sm">
+          <div>Paulo Cell</div>
+        </footer>
       </div>
     </div>
   );

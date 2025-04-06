@@ -101,6 +101,18 @@ const TrashBin: React.FC = () => {
     }
   };
   
+  // Calculate and format expiration date (60 days after deletion)
+  const formatExpirationDate = (deletedAtString?: string) => {
+    if (!deletedAtString) return 'N/A';
+    try {
+      const deletedAt = new Date(deletedAtString);
+      const expirationDate = new Date(deletedAt.getTime() + (60 * 24 * 60 * 60 * 1000)); // 60 days in milliseconds
+      return expirationDate.toLocaleDateString('pt-BR');
+    } catch (e) {
+      return 'N/A';
+    }
+  };
+  
   // Filter customers based on search term
   const filteredCustomers = deletedCustomers.filter(customer => 
     customer.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -187,9 +199,12 @@ const TrashBin: React.FC = () => {
                   </div>
                 </div>
                 
-                <div className="flex gap-3 mt-3 text-xs">
+                <div className="flex flex-wrap gap-3 mt-3 text-xs">
                   <div className="px-2.5 py-1 rounded-full bg-muted">
                     Excluído em: <span className="font-medium">{formatDate(customer.deletedAt)}</span>
+                  </div>
+                  <div className="px-2.5 py-1 rounded-full bg-red-100 text-red-800">
+                    Exclusão automática em: <span className="font-medium">{formatExpirationDate(customer.deletedAt)}</span>
                   </div>
                 </div>
                 
