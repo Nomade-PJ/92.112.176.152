@@ -30,7 +30,62 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
   const navigate = useNavigate();
+
+  // Função de login reusável
+  const performLogin = async (email: string, password: string): Promise<boolean> => {
+    try {
+      // Verificar credenciais fixas primeiro
+      if ((email === 'canalstvoficial@gmail.com' || email === 'paulocell') && 
+          (password === 'paulocell@admin1' || password === 'paulocell@admin')) {
+        const user = {
+          id: '1',
+          name: 'Paulo Cell Admin',
+          email: email === 'paulocell' ? 'canalstvoficial@gmail.com' : email
+        };
+        setUser(user);
+        localStorage.setItem('pauloCell_user', JSON.stringify(user));
+        return true;
+      }
+      
+      // Se não for credencial fixa, usar Supabase para login com email/senha
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      
+      if (error) throw error;
+      
+      if (data?.user) {
+        const user = {
+          id: data.user.id,
+          name: data.user.user_metadata?.full_name || 'Usuário',
+          email: data.user.email || ''
+        };
+        setUser(user);
+        localStorage.setItem('pauloCell_user', JSON.stringify(user));
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      // Fallback para autenticação local (para compatibilidade durante transição)
+      if ((email === 'paullo.celullar2020@gmail.com' || email === 'paulocell') && password === 'paulocell@admin') {
+        const user = {
+          id: '1',
+          name: 'Paulo Cell Admin',
+          email: email === 'paulocell' ? 'paullo.celullar2020@gmail.com' : email
+        };
+        setUser(user);
+        localStorage.setItem('pauloCell_user', JSON.stringify(user));
+        return true;
+      }
+      
+      console.error('Erro de login silencioso:', error);
+      return false;
+    }
+  };
 
   // Carregar usuário do Supabase Auth ao inicializar
   useEffect(() => {
@@ -57,11 +112,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } catch (error) {
               console.error('Erro ao analisar o usuário armazenado:', error);
               localStorage.removeItem('pauloCell_user');
+              
+              // Tentar login automático se não houver usuário
+              const loginSuccess = await performLogin('canalstvoficial@gmail.com', 'paulocell@admin1');
+              if (loginSuccess) {
+                console.log('Login automático realizado com sucesso!');
+              }
+            }
+          } else {
+            // Tentar login automático se não houver usuário
+            const loginSuccess = await performLogin('canalstvoficial@gmail.com', 'paulocell@admin1');
+            if (loginSuccess) {
+              console.log('Login automático realizado com sucesso!');
             }
           }
         }
       } catch (error) {
         console.error('Erro ao carregar usuário:', error);
+      } finally {
+        setInitialLoadDone(true);
       }
     };
     
@@ -93,50 +162,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
+  // Redirecionar automaticamente se o usuário estiver logado e estiver na página de login
+  useEffect(() => {
+    if (initialLoadDone && user && window.location.pathname === '/login') {
+      navigate('/dashboard');
+    }
+  }, [user, initialLoadDone, navigate]);
+
   const login = async (email: string, password: string) => {
     try {
-      // Usar Supabase para login com email/senha
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
+      const success = await performLogin(email, password);
       
-      if (error) throw error;
-      
-      if (data?.user) {
-        const user = {
-          id: data.user.id,
-          name: data.user.user_metadata?.full_name || 'Usuário',
-          email: data.user.email || ''
-        };
-        setUser(user);
-        localStorage.setItem('pauloCell_user', JSON.stringify(user));
-        
+      if (success) {
         toast({
           title: 'Login realizado com sucesso!',
           description: 'Bem-vindo ao sistema Paulo Cell.'
         });
         
         navigate('/dashboard');
+      } else {
+        throw new Error('Falha na autenticação');
       }
     } catch (error) {
-      // Fallback para autenticação local (para compatibilidade durante transição)
-      if ((email === 'paullo.celullar2020@gmail.com' || email === 'paulocell') && password === 'paulocell@admin') {
-        const user = {
-          id: '1',
-          name: 'Paulo Cell Admin',
-          email: email === 'paulocell' ? 'paullo.celullar2020@gmail.com' : email
-        };
-        setUser(user);
-        localStorage.setItem('pauloCell_user', JSON.stringify(user));
-        toast({
-          title: 'Login realizado com sucesso!',
-          description: 'Bem-vindo ao sistema Paulo Cell.'
-        });
-        navigate('/dashboard');
-        return;
-      }
-      
       console.error('Erro de login:', error);
       toast({
         variant: 'destructive',
@@ -262,7 +309,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         loginWithGoogle,
         register,
-        logout
+        logout,
       }}
     >
       {children}

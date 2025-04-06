@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 
-// Script para configurar o Supabase
-// Uso: node scripts/setup-supabase.js
+/**
+ * Script de Configuração do Supabase - PauloCell
+ * 
+ * Este script configura o Supabase com tabelas e esquemas iniciais.
+ * Executar com: node scripts/setup-supabase.js
+ */
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { exec } from 'child_process';
+const { createClient } = require('@supabase/supabase-js');
 
 // Obter diretório atual em módulos ES
 const __filename = fileURLToPath(import.meta.url);
@@ -79,4 +84,12 @@ process.stdin.once('data', (data) => {
     console.log('✅ Configuração manual concluída!');
     process.exit(0);
   }
-}); 
+});
+
+// Configurações do Supabase
+const SUPABASE_URL = 'http://92.112.176.152:8000';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE3OTk1MzU2MDB9.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE';
+const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTc5OTUzNTYwMH0.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q';
+
+// Criar cliente Supabase com a service key (permissões administrativas)
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY); 

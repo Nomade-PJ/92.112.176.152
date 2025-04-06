@@ -1,15 +1,13 @@
 // Configuração do Supabase para o PauloCell
 import { createClient } from '@supabase/supabase-js';
 
-// Carrega as variáveis de ambiente
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+// URL e chaves do Supabase - valores configuráveis
+// No ambiente de produção, estas serão substituídas por variáveis de ambiente
+const supabaseUrl = 'http://92.112.176.152:8000';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE3OTk1MzU2MDB9.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE';
+const supabaseServiceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTc5OTUzNTYwMH0.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q';
 
-// Verifica se as variáveis de ambiente estão definidas
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('⚠️ Variáveis de ambiente do Supabase não encontradas');
-  console.error('Configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no arquivo .env');
-}
+console.log('Inicializando cliente Supabase com URL:', supabaseUrl);
 
 // Cria o cliente do Supabase
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -277,18 +275,40 @@ export async function migrateLocalStorageToSupabase() {
       console.log(`✅ Migrados ${documents.length} documentos`);
     }
     
-    // Migrar configurações da empresa
+    // Migrar dados da empresa
     const localCompanyData = localStorage.getItem('pauloCell_companyData');
     if (localCompanyData) {
       const companyData = JSON.parse(localCompanyData);
       await saveCompanyData(companyData);
-      console.log('✅ Migradas configurações da empresa');
+      console.log('✅ Migrados dados da empresa');
     }
     
-    console.log('✅ Migração concluída com sucesso!');
+    console.log('✅ Migração completa!');
     return { success: true };
   } catch (error) {
-    console.error('❌ Erro durante a migração:', error);
-    return { success: false, error };
+    console.error('❌ Erro durante migração:', error);
+    return { error };
+  }
+}
+
+// Verificar se o Supabase está funcionando
+export async function testSupabaseConnection() {
+  try {
+    console.log('Testando conexão com Supabase...');
+    const { data, error } = await supabase.from('customers').select('count').single();
+    
+    if (error) {
+      console.error('❌ Erro ao conectar com Supabase:', error.message);
+      return { success: false, error: error.message };
+    }
+    
+    console.log('✅ Conexão com Supabase bem-sucedida!', data);
+    return { success: true, data };
+  } catch (error) {
+    console.error('❌ Exceção ao testar Supabase:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Erro desconhecido' 
+    };
   }
 } 

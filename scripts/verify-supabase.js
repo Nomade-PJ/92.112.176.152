@@ -1,45 +1,31 @@
 #!/usr/bin/env node
 
-// Script para verificar a configuração do Supabase
-// Uso: node scripts/verify-supabase.js
+/**
+ * Script de Verificação do Supabase - PauloCell
+ * 
+ * Este script verifica a conexão com o Supabase e se as tabelas necessárias existem.
+ * Executar com: node scripts/verify-supabase.js
+ */
 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
-import { createClient } from '@supabase/supabase-js';
+const { createClient } = require('@supabase/supabase-js');
 
-// Obter diretório atual em módulos ES
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Configurações do Supabase
+const SUPABASE_URL = 'http://92.112.176.152:8000';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE3OTk1MzU2MDB9.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE';
 
-// Carregar variáveis de ambiente
-const rootDir = path.join(__dirname, '..');
-dotenv.config({ path: path.join(rootDir, '.env') });
+// Lista de tabelas esperadas
+const expectedTables = [
+  'customers',
+  'devices',
+  'services',
+  'inventory',
+  'documents',
+  'settings',
+  'trash_bin'
+];
 
-// Verificar variáveis de ambiente
-const supabaseUrl = process.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const useSupabase = process.env.USE_SUPABASE;
-
-if (!useSupabase || useSupabase !== 'true') {
-  console.error('⚠️ AVISO: Supabase não está ativado no arquivo .env.');
-  console.error('Defina USE_SUPABASE=true antes de executar este script.');
-  process.exit(1);
-}
-
-if (!supabaseUrl || (!supabaseAnonKey && !supabaseServiceKey)) {
-  console.error('❌ Variáveis de ambiente do Supabase não encontradas!');
-  console.error('Configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY (ou SUPABASE_SERVICE_ROLE_KEY) no arquivo .env');
-  process.exit(1);
-}
-
-// Criar cliente Supabase com a chave de serviço, se disponível (para mais permissões)
-const supabase = createClient(
-  supabaseUrl, 
-  supabaseServiceKey || supabaseAnonKey
-);
+// Criar cliente Supabase
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Função para verificar se uma tabela existe
 async function checkTable(tableName) {
@@ -67,7 +53,7 @@ async function checkTable(tableName) {
 // Função principal para executar todos os testes
 async function verifySupabase() {
   console.log('=== Iniciando verificação do Supabase ===\n');
-  console.log('URL do Supabase:', supabaseUrl);
+  console.log('URL do Supabase:', SUPABASE_URL);
   
   // Verificar conexão
   try {
@@ -87,22 +73,11 @@ async function verifySupabase() {
     process.exit(1);
   }
   
-  // Lista de tabelas para verificar
-  const tables = [
-    'customers',
-    'devices',
-    'services',
-    'inventory',
-    'documents',
-    'settings',
-    'trash_bin'
-  ];
-  
   // Verificar existência das tabelas
   console.log('\n=== Verificando tabelas do banco de dados ===\n');
   let missingTables = 0;
   
-  for (const table of tables) {
+  for (const table of expectedTables) {
     const exists = await checkTable(table);
     if (!exists) missingTables++;
   }

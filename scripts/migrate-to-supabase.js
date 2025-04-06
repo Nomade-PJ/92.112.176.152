@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 
-// Script para migrar dados do localStorage para o Supabase
-// Uso: node scripts/migrate-to-supabase.js
+/**
+ * Script de Migração para Supabase - PauloCell
+ * 
+ * Este script migra dados do localStorage para o Supabase
+ * Executar com: node scripts/migrate-to-supabase.js
+ */
 
 import fs from 'fs';
 import path from 'path';
@@ -18,22 +22,21 @@ const rootDir = path.join(__dirname, '..');
 // Carregar variáveis de ambiente
 dotenv.config({ path: path.join(rootDir, '.env') });
 
-// Obter variáveis de ambiente do Supabase
-const supabaseUrl = process.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Configurações do Supabase
+const SUPABASE_URL = 'http://92.112.176.152:8000';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE3OTk1MzU2MDB9.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE';
 
 // Verificar configurações
-if (!supabaseUrl || (!supabaseAnonKey && !supabaseServiceKey)) {
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.error('⚠️ Variáveis de ambiente do Supabase não encontradas!');
-  console.error('Configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY (ou SUPABASE_SERVICE_ROLE_KEY) no arquivo .env');
+  console.error('Configure SUPABASE_URL e SUPABASE_ANON_KEY no arquivo .env');
   process.exit(1);
 }
 
 // Criar cliente Supabase com a chave de serviço, se disponível (para mais permissões)
 const supabase = createClient(
-  supabaseUrl, 
-  supabaseServiceKey || supabaseAnonKey
+  SUPABASE_URL, 
+  SUPABASE_ANON_KEY
 );
 
 // Interface de linha de comando
